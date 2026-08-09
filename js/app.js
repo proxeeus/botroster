@@ -600,18 +600,53 @@ function escapeHtml(s) {
     })[c]);
 }
 
+// --- Session reset -----------------------------------------------------
+// Wipe every per-session bit of state AND scrub the DOM so nothing from the
+// previous character bleeds into the next view. Called on logout and on
+// change-character.
+function resetSessionUi({ keepAccount = false } = {}) {
+    if (!keepAccount) state.account_id = null;
+    state.character = null;
+    state.bots = [];
+    state.selected_bot = null;
+    state.bot_equipment = [];
+    state.bot_items = {};
+    state.player_items = [];
+    state.player_items_by_id = {};
+    state.equipment_selected_source = null;
+    state.spells = [];
+    state.spell_filter = '';
+    state.only_overrides = false;
+    // Force the detail panel back to its "pick a bot" state.
+    document.getElementById('detail-content').classList.add('hidden');
+    document.getElementById('detail-placeholder').classList.remove('hidden');
+    document.getElementById('bot-list').innerHTML = '';
+    document.getElementById('bot-empty').classList.add('hidden');
+    document.getElementById('bot-paperdoll').innerHTML = '';
+    document.getElementById('player-inventory').innerHTML = '';
+    document.getElementById('spell-list').innerHTML = '';
+    document.getElementById('bot-name').textContent = '--';
+    document.getElementById('bot-subtitle').textContent = '--';
+    document.getElementById('char-name').textContent = '--';
+    document.getElementById('char-title').textContent = '--';
+    document.getElementById('inv-count').textContent = '';
+    const filterInput = document.getElementById('spell-filter');
+    if (filterInput) filterInput.value = '';
+    const onlyOverridesInput = document.getElementById('spell-only-overrides');
+    if (onlyOverridesInput) onlyOverridesInput.checked = false;
+    hideTooltip();
+}
+
 // --- Global event wiring ----------------------------------------------
 document.addEventListener('click', async (ev) => {
     const t = ev.target;
     if (t.matches('[data-action="logout"]')) {
         await api('logout.php', { method: 'POST' }).catch(() => {});
-        state.character = null;
-        state.selected_bot = null;
+        resetSessionUi();
         showLogin();
     }
     if (t.matches('[data-action="change-character"]')) {
-        state.character = null;
-        state.selected_bot = null;
+        resetSessionUi({ keepAccount: true });
         showCharacterSelect();
     }
     if (t.matches('.tab')) setTab(t.dataset.tab);
