@@ -450,9 +450,10 @@ function itemAllowsBot(item) {
 
 function highlightPaperdollForItem() {
     const source = state.equipment_selected_source;
-    document.querySelectorAll('.paperdoll .slot').forEach(el => {
-        el.style.boxShadow = '';
-        el.style.borderColor = '';
+    // Only the BOT paperdoll should glow -- your own paperdoll is the
+    // source and clicking a slot there would be confusing.
+    document.querySelectorAll('#bot-paperdoll .slot').forEach(el => {
+        el.classList.remove('highlight-target');
     });
     if (source === null) return;
     const inv = state.player_items.find(i => i.slot === source);
@@ -461,11 +462,8 @@ function highlightPaperdollForItem() {
     if (!item) return;
     for (let i = 0; i <= 22; i++) {
         if (item.slots & (1 << i)) {
-            const el = document.querySelector(`.paperdoll .slot[data-slot-id="${i}"]`);
-            if (el) {
-                el.style.boxShadow = '0 0 10px rgba(184,147,90,0.9)';
-                el.style.borderColor = 'var(--seal-red)';
-            }
+            const el = document.querySelector(`#bot-paperdoll .slot[data-slot-id="${i}"]`);
+            if (el) el.classList.add('highlight-target');
         }
     }
 }

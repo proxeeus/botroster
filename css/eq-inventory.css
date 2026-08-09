@@ -143,6 +143,19 @@
     box-shadow: 0 0 0 2px var(--seal-red);
 }
 
+/* Highlighted target slots on the bot paperdoll while an inv item is selected. */
+#bot-paperdoll .slot.highlight-target .slot-inner {
+    box-shadow: 0 0 0 2px var(--seal-red), 0 0 12px 3px rgba(184,147,90,0.85);
+    background: rgba(184, 147, 90, 0.25);
+}
+#bot-paperdoll .slot.highlight-target {
+    animation: pulse-target 1.4s ease-in-out infinite;
+}
+@keyframes pulse-target {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.06); }
+}
+
 .eq-paperdoll .slot .nodrop-badge {
     position: absolute;
     top: -4px;
