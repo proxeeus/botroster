@@ -22,6 +22,12 @@ const state = {
     spell_filter: '',
     spell_sort: 'level_asc',
     only_overrides: false,
+
+    // Roster controls
+    roster_search: '',
+    roster_sort: 'level_desc',
+    favorites: new Set(),        // Set<bot_id> pinned for the current character
+    collapsed_groups: new Set(), // Set<role_key> for user-collapsed sections
 };
 
 // --- EQ visual helpers ------------------------------------------------
@@ -53,6 +59,67 @@ function facePath(race, gender, face) {
     const r = +race || 1, g = +gender || 0, f = +face || 1;
     return `${CHARBROWSER_ROOT}/faces/race_${r}_gender_${g}_face_${f}.png`;
 }
+function classMonogramHtml(classId, extraClass = '') {
+    if (!classId) return '';
+    return `<img class="class-monogram ${extraClass}" src="${CHARBROWSER_ROOT}/monograms/${+classId}.gif" alt="" title="${className(+classId)}">`;
+}
+
+// --- Roster: role mapping + favorites persistence ---------------------
+const CLASS_ROLE = {
+    1:  'tanks',   3:  'tanks',   5:  'tanks',      // War, Pal, SK
+    2:  'healers', 6:  'healers', 10: 'healers',    // Cle, Dru, Sha
+    7:  'melee',   9:  'melee',   4:  'melee',      // Mnk, Rog, Rng
+    15: 'melee',   16: 'melee',                     // Bst, Ber
+    12: 'casters', 13: 'casters', 11: 'casters',    // Wiz, Mag, Nec
+    8:  'utility', 14: 'utility',                   // Brd, Enc
+};
+const ROLE_ORDER = ['tanks', 'healers', 'melee', 'casters', 'utility'];
+const ROLE_LABEL = {
+    tanks:   'Tanks',
+    healers: 'Healers',
+    melee:   'Melee DPS',
+    casters: 'Caster DPS',
+    utility: 'Utility',
+};
+function classRole(classId) { return CLASS_ROLE[+classId] || 'utility'; }
+
+const FAV_KEY_PREFIX = 'botroster.favs.';
+const COLLAPSE_KEY_PREFIX = 'botroster.collapse.';
+function favKey()      { return FAV_KEY_PREFIX + (state.character?.id || '0'); }
+function collapseKey() { return COLLAPSE_KEY_PREFIX + (state.character?.id || '0'); }
+function loadFavorites() {
+    try {
+        const raw = localStorage.getItem(favKey());
+        state.favorites = new Set(raw ? JSON.parse(raw) : []);
+    } catch { state.favorites = new Set(); }
+}
+function saveFavorites() {
+    try { localStorage.setItem(favKey(), JSON.stringify([...state.favorites])); }
+    catch {}
+}
+function loadCollapsedGroups() {
+    try {
+        const raw = localStorage.getItem(collapseKey());
+        state.collapsed_groups = new Set(raw ? JSON.parse(raw) : []);
+    } catch { state.collapsed_groups = new Set(); }
+}
+function saveCollapsedGroups() {
+    try { localStorage.setItem(collapseKey(), JSON.stringify([...state.collapsed_groups])); }
+    catch {}
+}
+function togglePin(botId) {
+    if (state.favorites.has(botId)) state.favorites.delete(botId);
+    else state.favorites.add(botId);
+    saveFavorites();
+    renderBotGroups();
+}
+function toggleGroupCollapse(role) {
+    if (state.collapsed_groups.has(role)) state.collapsed_groups.delete(role);
+    else state.collapsed_groups.add(role);
+    saveCollapsedGroups();
+    renderBotGroups();
+}
+
 function avatarHtml({ race, gender, face }, { self = false, klass = '' } = {}) {
     const src = facePath(race, gender, face);
     // onerror falls back to a generic Human face if the specific PNG is missing
@@ -197,34 +264,113 @@ async function enterMain() {
 }
 
 async function loadBots() {
-    const list = document.getElementById('bot-list');
+    const groups = document.getElementById('bot-groups');
     const empty = document.getElementById('bot-empty');
-    list.innerHTML = '<li class="dim">Summoning roster…</li>';
+    groups.innerHTML = '<div class="dim" style="padding:12px;">Summoning roster…</div>';
     try {
         const { bots } = await api('bots.php');
         state.bots = bots;
-        list.innerHTML = '';
         if (!bots.length) {
+            groups.innerHTML = '';
             empty.classList.remove('hidden');
             return;
         }
         empty.classList.add('hidden');
-        for (const b of bots) {
-            const li = document.createElement('li');
-            li.dataset.botId = b.id;
-            li.innerHTML = `
-                ${avatarHtml(b)}
-                <div class="bot-info">
-                    <div class="bot-name">${escapeHtml(b.name)}</div>
-                    <div class="bot-meta">Lv ${b.level} ${escapeHtml(b.race_name)} ${escapeHtml(b.class_name)}</div>
-                </div>
-            `;
-            li.addEventListener('click', () => selectBot(b));
-            list.appendChild(li);
-        }
+        loadFavorites();
+        loadCollapsedGroups();
+        renderBotGroups();
     } catch (e) {
-        list.innerHTML = `<li class="error">${escapeHtml(e.message)}</li>`;
+        groups.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
     }
+}
+
+function botRowHtml(b) {
+    const pinned = state.favorites.has(b.id);
+    return `
+        <li data-bot-id="${b.id}" class="${pinned ? 'pinned' : ''}">
+            <button class="pin-btn" data-action="pin" data-bot-id="${b.id}"
+                    title="${pinned ? 'Unpin' : 'Pin to favorites'}">${pinned ? '★' : '☆'}</button>
+            ${avatarHtml(b)}
+            <div class="bot-info">
+                <div class="bot-name">${classMonogramHtml(b.class)}<span>${escapeHtml(b.name)}</span></div>
+                <div class="bot-meta">Lv ${b.level} ${escapeHtml(b.race_name)}</div>
+            </div>
+        </li>`;
+}
+
+function botComparator(mode) {
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    switch (mode) {
+        case 'level_asc': return (a, b) => (a.level - b.level) || byName(a, b);
+        case 'name_asc':  return byName;
+        case 'level_desc':
+        default:          return (a, b) => (b.level - a.level) || byName(a, b);
+    }
+}
+
+function renderBotGroups() {
+    const host = document.getElementById('bot-groups');
+    host.innerHTML = '';
+
+    const q = state.roster_search.trim().toLowerCase();
+    const cmp = botComparator(state.roster_sort);
+    // Apply search first, then bucket.
+    const matching = q ? state.bots.filter(b => b.name.toLowerCase().includes(q)) : state.bots;
+    document.getElementById('roster-count').textContent =
+        q ? `(${matching.length} / ${state.bots.length})` : `(${state.bots.length})`;
+
+    // Favorites section -- only bots that (a) are pinned and (b) pass the search.
+    const favBots = matching.filter(b => state.favorites.has(b.id)).sort(cmp);
+    if (favBots.length) {
+        host.appendChild(buildGroupSection('favorites', 'Favorites', favBots, true));
+    }
+
+    // Role groups.
+    const buckets = {};
+    for (const b of matching) {
+        const role = classRole(b.class);
+        (buckets[role] ||= []).push(b);
+    }
+    for (const role of ROLE_ORDER) {
+        const list = (buckets[role] || []).sort(cmp);
+        if (!list.length) continue;
+        host.appendChild(buildGroupSection(role, ROLE_LABEL[role], list, false));
+    }
+
+    // Preserve active-highlight on the currently-selected bot after re-render.
+    if (state.selected_bot) {
+        const li = host.querySelector(`li[data-bot-id="${state.selected_bot.id}"]`);
+        if (li) li.classList.add('active');
+    }
+}
+
+function buildGroupSection(role, label, bots, isFavorites) {
+    const collapsed = state.collapsed_groups.has(role);
+    const sec = document.createElement('section');
+    sec.className = 'bot-group' + (isFavorites ? ' favorites' : '') + (collapsed ? ' collapsed' : '');
+    sec.dataset.role = role;
+    sec.innerHTML = `
+        <header class="bot-group-header" data-action="toggle-group" data-role="${role}">
+            <span class="chevron">▾</span>
+            <span class="role-name">${isFavorites ? '<span class="role-star">★</span> ' : ''}${label}</span>
+            <span class="role-count">${bots.length}</span>
+        </header>
+        <ul class="bot-list">${bots.map(botRowHtml).join('')}</ul>`;
+    // Wire clicks -- one delegated listener for all rows in the section.
+    const ul = sec.querySelector('ul');
+    ul.addEventListener('click', (ev) => {
+        const pinBtn = ev.target.closest('[data-action="pin"]');
+        if (pinBtn) {
+            ev.stopPropagation();
+            togglePin(+pinBtn.dataset.botId);
+            return;
+        }
+        const li = ev.target.closest('li[data-bot-id]');
+        if (!li) return;
+        const bot = state.bots.find(b => b.id === +li.dataset.botId);
+        if (bot) selectBot(bot);
+    });
+    return sec;
 }
 
 async function selectBot(b) {
@@ -779,8 +925,16 @@ function resetSessionUi({ keepAccount = false } = {}) {
     // Force the detail panel back to its "pick a bot" state.
     document.getElementById('detail-content').classList.add('hidden');
     document.getElementById('detail-placeholder').classList.remove('hidden');
-    document.getElementById('bot-list').innerHTML = '';
+    const groupsEl = document.getElementById('bot-groups');
+    if (groupsEl) groupsEl.innerHTML = '';
     document.getElementById('bot-empty').classList.add('hidden');
+    document.getElementById('roster-count').textContent = '';
+    document.getElementById('roster-search').value = '';
+    document.getElementById('roster-sort').value = 'level_desc';
+    state.roster_search = '';
+    state.roster_sort = 'level_desc';
+    state.favorites = new Set();
+    state.collapsed_groups = new Set();
     document.getElementById('bot-paperdoll').innerHTML = '';
     document.getElementById('player-inventory').innerHTML = '';
     document.getElementById('spell-list').innerHTML = '';
@@ -818,12 +972,21 @@ document.addEventListener('click', async (ev) => {
         state.active_inv_tab = t.dataset.inv;
         renderPlayerInventory();
     }
+    // Roster group collapse toggle.
+    const groupHeader = t.closest('[data-action="toggle-group"]');
+    if (groupHeader) {
+        toggleGroupCollapse(groupHeader.dataset.role);
+    }
 });
 
 document.addEventListener('input', (ev) => {
     if (ev.target.id === 'spell-filter') {
         state.spell_filter = ev.target.value;
         renderSpells();
+    }
+    if (ev.target.id === 'roster-search') {
+        state.roster_search = ev.target.value;
+        renderBotGroups();
     }
 });
 document.addEventListener('change', (ev) => {
@@ -834,6 +997,10 @@ document.addEventListener('change', (ev) => {
     if (ev.target.id === 'spell-sort') {
         state.spell_sort = ev.target.value;
         renderSpells();
+    }
+    if (ev.target.id === 'roster-sort') {
+        state.roster_sort = ev.target.value;
+        renderBotGroups();
     }
 });
 
