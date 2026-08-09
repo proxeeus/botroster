@@ -24,6 +24,47 @@ const state = {
     only_overrides: false,
 };
 
+// --- EQ visual helpers ------------------------------------------------
+// charbrowser packs every 40x40 icon into 10x10 spritesheets, one file per
+// 100 icons starting at icon id 500. We reference them directly from
+// /charbrowser/images/ rather than duplicating the ~18 MB of PNGs into
+// botroster's repo.
+const CHARBROWSER_ROOT = '/charbrowser/images';
+
+function itemIconStyle(iconId) {
+    const n = +iconId;
+    if (!n || n < 500) return '';
+    const sheet  = Math.floor((n - 500) / 100) + 1;
+    const offset = (n - 500) % 100;
+    const col    = Math.floor(offset / 10);
+    const row    = offset % 10;
+    return `background-image: url('${CHARBROWSER_ROOT}/itemsheets/${sheet}.png'); ` +
+           `background-position: ${-col * 40}px ${-row * 40}px;`;
+}
+
+function itemIconHtml(item, extraClass = '') {
+    if (!item || !+item.icon) return '';
+    return `<span class="eq-icon ${extraClass}" style="${itemIconStyle(item.icon)}"></span>`;
+}
+
+// race+gender+face -> PNG in charbrowser's faces dir.
+// Falls back to face 1 if the requested face is out of range.
+function facePath(race, gender, face) {
+    const r = +race || 1, g = +gender || 0, f = +face || 1;
+    return `${CHARBROWSER_ROOT}/faces/race_${r}_gender_${g}_face_${f}.png`;
+}
+function avatarHtml({ race, gender, face }, { self = false, klass = '' } = {}) {
+    const src = facePath(race, gender, face);
+    // onerror falls back to a generic Human face if the specific PNG is missing
+    // (e.g. bots with face 0 or Drakkin variants not shipped by charbrowser).
+    return `
+        <span class="eq-avatar-stack ${self ? 'self' : ''} ${klass}">
+            <span class="avatar-face" style="background-image: url('${src}');"
+                  onerror="this.style.backgroundImage='url(${CHARBROWSER_ROOT}/faces/race_1_gender_0_face_1.png)'"></span>
+            <span class="avatar-frame"></span>
+        </span>`;
+}
+
 // --- API layer ---------------------------------------------------------
 async function api(url, opts = {}) {
     const init = {
@@ -122,7 +163,8 @@ async function showCharacterSelect() {
         for (const c of characters) {
             const li = document.createElement('li');
             li.innerHTML = `
-                <div>
+                ${avatarHtml(c, { self: true })}
+                <div class="char-info">
                     <div class="char-title">${escapeHtml(c.name)}</div>
                     <div class="char-sub">Level ${c.level} ${escapeHtml(c.race_name)} ${escapeHtml(c.class_name)}</div>
                 </div>
@@ -148,6 +190,8 @@ async function enterMain() {
     document.getElementById('char-name').textContent = state.character.name;
     document.getElementById('char-title').textContent =
         `Level ${state.character.level} ${state.character.race_name || raceName(state.character.race)} ${state.character.class_name || className(state.character.class)}`;
+    document.getElementById('char-avatar-host').innerHTML =
+        avatarHtml(state.character, { self: true });
 
     await loadBots();
 }
@@ -169,7 +213,8 @@ async function loadBots() {
             const li = document.createElement('li');
             li.dataset.botId = b.id;
             li.innerHTML = `
-                <div>
+                ${avatarHtml(b)}
+                <div class="bot-info">
                     <div class="bot-name">${escapeHtml(b.name)}</div>
                     <div class="bot-meta">Lv ${b.level} ${escapeHtml(b.race_name)} ${escapeHtml(b.class_name)}</div>
                 </div>
@@ -187,9 +232,14 @@ async function selectBot(b) {
     document.querySelectorAll('.bot-list li').forEach(li => li.classList.toggle('active', +li.dataset.botId === b.id));
     document.getElementById('detail-placeholder').classList.add('hidden');
     document.getElementById('detail-content').classList.remove('hidden');
-    document.getElementById('bot-name').textContent = b.name;
-    document.getElementById('bot-subtitle').textContent =
-        `Level ${b.level} ${b.race_name} ${b.class_name}`;
+    // Rebuild the header so the avatar slot is refreshed with this bot's face.
+    const header = document.querySelector('.bot-header > div:first-child');
+    header.innerHTML = `
+        ${avatarHtml(b)}
+        <div>
+            <h2 id="bot-name">${escapeHtml(b.name)}</h2>
+            <p class="dim" id="bot-subtitle">Level ${b.level} ${escapeHtml(b.race_name)} ${escapeHtml(b.class_name)}</p>
+        </div>`;
     setTab(state.active_tab);
 }
 
@@ -229,26 +279,26 @@ function renderPaperdoll() {
     const equippedBySlot = {};
     for (const e of state.bot_equipment) equippedBySlot[e.slot] = e;
 
-    const SLOT_ORDER = [
-        [0,'Charm'], [1,'L Ear'], [2,'Head'], [3,'Face'], [4,'R Ear'],
-        [5,'Neck'], [6,'Shoulders'], [7,'Arms'], [17,'Chest'], [8,'Back'],
-        [9,'L Wrist'], [10,'R Wrist'], [12,'Hands'], [15,'L Finger'], [16,'R Finger'],
-        [18,'Legs'], [19,'Feet'], [20,'Waist'], [21,'Power'], [22,'Ammo'],
-        [11,'Range'], [13,'Primary'], [14,'Secondary'],
-    ];
-
+    // ALL 23 equipment slots, in slotid order. Grid areas from CSS take care
+    // of visual placement -- we just have to emit one div per slot plus the
+    // central avatar cell.
     pd.innerHTML = '';
-    for (const [slotId, label] of SLOT_ORDER) {
+    for (let slotId = 0; slotId <= 22; slotId++) {
         const eq = equippedBySlot[slotId];
-        const div = document.createElement('div');
-        div.className = 'slot' + (eq ? '' : ' empty');
-        div.dataset.slotId = slotId;
         const item = eq ? state.bot_items[eq.item_id] : null;
+        const div = document.createElement('div');
+        div.className = `slot eq-slot-${slotId}` + (eq ? '' : ' empty');
+        div.dataset.slotId = slotId;
+        const label = EQUIP_LABEL[slotId] || '';
+        const innerCls = 'slot-inner' + (item ? '' : ` slot-silhouette slot-silhouette-${slotId}`);
+        const iconStyle = item ? itemIconStyle(item.icon) : '';
         div.innerHTML = `
-            <div class="slot-label">${label}</div>
-            <div class="item-name">${item ? escapeHtml(item.Name) : ''}</div>
-            ${eq && eq.no_drop ? '<div class="nodrop">no drop</div>' : ''}
-        `;
+            <div class="${innerCls}"
+                 title="${item ? escapeHtml(item.Name) : label}"
+                 ${iconStyle ? `style="${iconStyle}"` : ''}>
+            </div>
+            <span class="slot-label">${label}</span>
+            ${eq && eq.no_drop ? '<span class="nodrop-badge">nd</span>' : ''}`;
         if (item) {
             div.addEventListener('mouseenter', (ev) => showTooltip(ev, item));
             div.addEventListener('mouseleave', hideTooltip);
@@ -256,6 +306,11 @@ function renderPaperdoll() {
         div.addEventListener('click', () => onPaperdollClick(slotId));
         pd.appendChild(div);
     }
+    // Central avatar cell -- lives inside the grid area "av".
+    const av = document.createElement('div');
+    av.className = 'eq-avatar';
+    av.innerHTML = state.selected_bot ? avatarHtml(state.selected_bot) : '';
+    pd.appendChild(av);
 }
 
 function renderPlayerInventory() {
@@ -286,8 +341,11 @@ function renderPlayerInventory() {
                           inv.location === 'bank' ? `bank ${inv.slot - 1999}` :
                           inv.location;
         div.innerHTML = `
-            <div class="item-name">${escapeHtml(item.Name)}</div>
-            <div class="item-meta">${slotLabel}</div>
+            <div class="eq-icon-wrap">${itemIconHtml(item)}</div>
+            <div class="item-info">
+                <div class="item-name">${escapeHtml(item.Name)}</div>
+                <div class="item-meta">${slotLabel}</div>
+            </div>
         `;
         div.addEventListener('mouseenter', (ev) => showTooltip(ev, item, state.selected_bot));
         div.addEventListener('mouseleave', hideTooltip);
@@ -552,6 +610,7 @@ function spellComparator(mode) {
 // --- Tooltip -----------------------------------------------------------
 const tooltipEl = document.getElementById('tooltip');
 function showTooltip(ev, item, bot = null) {
+    const iconHtml = itemIconHtml(item);
     const lines = [];
     if (item.itemtype != null) lines.push(`Type ${item.itemtype}`);
     if (+item.ac)     lines.push(`AC ${item.ac}`);
@@ -579,7 +638,8 @@ function showTooltip(ev, item, bot = null) {
     }
 
     tooltipEl.innerHTML = `
-        <span class="t-name">${escapeHtml(item.Name)}</span>
+        ${iconHtml ? `<div class="t-icon-row">${iconHtml}<span class="t-name">${escapeHtml(item.Name)}</span></div>`
+                   : `<span class="t-name">${escapeHtml(item.Name)}</span>`}
         ${lines.length ? `<div class="t-line">${lines.join(' · ')}</div>` : ''}
         ${slotNames.length ? `<div class="t-line">Slots: ${slotNames.join(', ')}</div>` : ''}
         ${cls.length ? `<div class="t-restrict">Classes: ${cls.join(', ')}</div>` : ''}
@@ -680,6 +740,8 @@ function resetSessionUi({ keepAccount = false } = {}) {
     document.getElementById('bot-subtitle').textContent = '--';
     document.getElementById('char-name').textContent = '--';
     document.getElementById('char-title').textContent = '--';
+    const charAv = document.getElementById('char-avatar-host');
+    if (charAv) charAv.innerHTML = '';
     document.getElementById('inv-count').textContent = '';
     const filterInput = document.getElementById('spell-filter');
     if (filterInput) filterInput.value = '';

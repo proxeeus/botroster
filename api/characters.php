@@ -4,7 +4,7 @@ require_once __DIR__ . '/slots.php';
 
 $s = require_auth();
 
-$sql = 'SELECT id, name, level, class, race, last_login
+$sql = 'SELECT id, name, level, class, race, gender, face, last_login
         FROM character_data
         WHERE account_id = :aid ';
 $sql .= 'AND (deleted_at IS NULL OR deleted_at = 0) ';
@@ -17,7 +17,7 @@ try {
 } catch (PDOException $e) {
     // Fallback for schemas that lack deleted_at / last_login.
     $stmt = db()->prepare(
-        'SELECT id, name, level, class, race
+        'SELECT id, name, level, class, race, gender, face
          FROM character_data WHERE account_id = :aid ORDER BY name ASC'
     );
     $stmt->execute([':aid' => $s['account_id']]);

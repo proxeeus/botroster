@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bot Roster</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/eq-inventory.css">
 </head>
 <body>
     <!-- Login view ------------------------------------------------------- -->
@@ -42,8 +43,11 @@
         <header class="topbar">
             <h1 class="crest small">Bot Roster</h1>
             <div class="character-badge">
-                <span id="char-name">--</span>
-                <span class="dim" id="char-title">--</span>
+                <span id="char-avatar-host"></span>
+                <span class="badge-text">
+                    <span id="char-name">--</span>
+                    <span class="dim" id="char-title">--</span>
+                </span>
             </div>
             <nav class="topbar-actions">
                 <button class="link-btn" data-action="change-character">Switch adventurer</button>
@@ -85,7 +89,7 @@
                         <div class="equipment-grid">
                             <div class="parchment column">
                                 <h3>Bot Equipment</h3>
-                                <div id="bot-paperdoll" class="paperdoll"></div>
+                                <div id="bot-paperdoll" class="eq-paperdoll"></div>
                                 <p class="hint dim">
                                     Click a piece of your inventory to equip it,
                                     or click a worn item to return it to your bags.

@@ -1,0 +1,274 @@
+/* ============================================================
+   EQ-style inventory / paperdoll / avatar visuals.
+   Item icons + slot silhouettes + faces are pulled from the
+   sibling charbrowser install (C:\xampp\htdocs\charbrowser\images).
+   ============================================================ */
+
+/* ---- Item icon spritesheet ------------------------------------------
+   charbrowser packs every 40x40 item icon into 10x10 spritesheets under
+   /charbrowser/images/itemsheets/{sheet}.png . Icon 500 = sheet 1 (0,0),
+   icon 501 = sheet 1 (0,-40), ... The math is done in app.js since baking
+   thousands of static rules would just bloat this file. */
+
+.eq-icon {
+    width: 40px;
+    height: 40px;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    display: inline-block;
+    vertical-align: middle;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* ---- Slot silhouettes ----------------------------------------------- */
+/* Empty equipment slots show an EQ-authentic outline of the item type
+   that belongs there (helm, chest, ring...). */
+.slot-silhouette {
+    background: rgba(20, 12, 8, 0.35) center center no-repeat;
+    background-size: 32px 32px;
+}
+.slot-silhouette-0  { background-image: url('/charbrowser/images/slots/slot_0.gif'); }
+.slot-silhouette-1  { background-image: url('/charbrowser/images/slots/slot_1.gif'); }
+.slot-silhouette-2  { background-image: url('/charbrowser/images/slots/slot_2.gif'); }
+.slot-silhouette-3  { background-image: url('/charbrowser/images/slots/slot_3.gif'); }
+.slot-silhouette-4  { background-image: url('/charbrowser/images/slots/slot_4.gif'); }
+.slot-silhouette-5  { background-image: url('/charbrowser/images/slots/slot_5.gif'); }
+.slot-silhouette-6  { background-image: url('/charbrowser/images/slots/slot_6.gif'); }
+.slot-silhouette-7  { background-image: url('/charbrowser/images/slots/slot_7.gif'); }
+.slot-silhouette-8  { background-image: url('/charbrowser/images/slots/slot_8.gif'); }
+.slot-silhouette-9  { background-image: url('/charbrowser/images/slots/slot_9.gif'); }
+.slot-silhouette-10 { background-image: url('/charbrowser/images/slots/slot_10.gif'); }
+.slot-silhouette-11 { background-image: url('/charbrowser/images/slots/slot_11.gif'); }
+.slot-silhouette-12 { background-image: url('/charbrowser/images/slots/slot_12.gif'); }
+.slot-silhouette-13 { background-image: url('/charbrowser/images/slots/slot_13.gif'); }
+.slot-silhouette-14 { background-image: url('/charbrowser/images/slots/slot_14.gif'); }
+.slot-silhouette-15 { background-image: url('/charbrowser/images/slots/slot_15.gif'); }
+.slot-silhouette-16 { background-image: url('/charbrowser/images/slots/slot_16.gif'); }
+.slot-silhouette-17 { background-image: url('/charbrowser/images/slots/slot_17.gif'); }
+.slot-silhouette-18 { background-image: url('/charbrowser/images/slots/slot_18.gif'); }
+.slot-silhouette-19 { background-image: url('/charbrowser/images/slots/slot_19.gif'); }
+.slot-silhouette-20 { background-image: url('/charbrowser/images/slots/slot_20.gif'); }
+.slot-silhouette-21 { background-image: url('/charbrowser/images/slots/slot_21.gif'); }
+.slot-silhouette-22 { background-image: url('/charbrowser/images/slots/slot_22.gif'); }
+
+/* ---- Paperdoll layout ----------------------------------------------- */
+/* Named-area grid roughly follows EQ's classic paperdoll: ears + head + face
+   on the top row, primary/secondary/range/ammo across the bottom, avatar
+   centred in the empty middle spanning rows 2-5 and columns 2-3. */
+.eq-paperdoll {
+    display: grid;
+    grid-template-columns: repeat(4, 60px);
+    grid-template-rows: repeat(8, 60px);
+    gap: 4px;
+    justify-content: center;
+    padding: 12px;
+    grid-template-areas:
+        "s1  s2  s3  s4"
+        "s17 av  av  s5"
+        "s7  av  av  s8"
+        "s20 av  av  s6"
+        "s9  av  av  s10"
+        "s18 s12 s0  s19"
+        ".   s15 s16 s21"
+        "s13 s14 s11 s22";
+}
+.eq-paperdoll .eq-slot-0  { grid-area: s0;  }
+.eq-paperdoll .eq-slot-1  { grid-area: s1;  }
+.eq-paperdoll .eq-slot-2  { grid-area: s2;  }
+.eq-paperdoll .eq-slot-3  { grid-area: s3;  }
+.eq-paperdoll .eq-slot-4  { grid-area: s4;  }
+.eq-paperdoll .eq-slot-5  { grid-area: s5;  }
+.eq-paperdoll .eq-slot-6  { grid-area: s6;  }
+.eq-paperdoll .eq-slot-7  { grid-area: s7;  }
+.eq-paperdoll .eq-slot-8  { grid-area: s8;  }
+.eq-paperdoll .eq-slot-9  { grid-area: s9;  }
+.eq-paperdoll .eq-slot-10 { grid-area: s10; }
+.eq-paperdoll .eq-slot-11 { grid-area: s11; }
+.eq-paperdoll .eq-slot-12 { grid-area: s12; }
+.eq-paperdoll .eq-slot-13 { grid-area: s13; }
+.eq-paperdoll .eq-slot-14 { grid-area: s14; }
+.eq-paperdoll .eq-slot-15 { grid-area: s15; }
+.eq-paperdoll .eq-slot-16 { grid-area: s16; }
+.eq-paperdoll .eq-slot-17 { grid-area: s17; }
+.eq-paperdoll .eq-slot-18 { grid-area: s18; }
+.eq-paperdoll .eq-slot-19 { grid-area: s19; }
+.eq-paperdoll .eq-slot-20 { grid-area: s20; }
+.eq-paperdoll .eq-slot-21 { grid-area: s21; }
+.eq-paperdoll .eq-slot-22 { grid-area: s22; }
+.eq-paperdoll .eq-avatar  { grid-area: av; }
+
+/* Override the generic .slot cell so each paperdoll cell is a fixed 60x60. */
+.eq-paperdoll .slot {
+    min-height: 0;
+    aspect-ratio: auto;
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+.eq-paperdoll .slot .slot-inner {
+    width: 40px;
+    height: 40px;
+    position: relative;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.eq-paperdoll .slot .slot-inner .eq-icon {
+    width: 40px;
+    height: 40px;
+}
+.eq-paperdoll .slot .slot-label {
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.55rem;
+    color: var(--ink-soft);
+    font-variant: small-caps;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    text-shadow: 0 0 3px var(--parchment-lt);
+    pointer-events: none;
+}
+.eq-paperdoll .slot .nodrop-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--seal-red);
+    color: #fff8e0;
+    font-size: 0.55rem;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-variant: small-caps;
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    pointer-events: none;
+}
+
+/* ---- Avatar (layered face) ------------------------------------------ */
+/* Three-layer stack: underlay circle, face image, overlay frame. */
+.eq-avatar-stack {
+    position: relative;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-image: url('/charbrowser/images/avatar_underlay_bot.svg');
+}
+.eq-avatar-stack .avatar-face,
+.eq-avatar-stack .avatar-frame {
+    position: absolute;
+    inset: 0;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    border-radius: 50%;
+}
+.eq-avatar-stack .avatar-frame {
+    background-image: url('/charbrowser/images/avatar_overlay.svg');
+    pointer-events: none;
+}
+.eq-avatar-stack.self {
+    background-image: url('/charbrowser/images/avatar_underlay_blue.svg');
+}
+
+/* Big avatar inside the paperdoll's center. */
+.eq-paperdoll .eq-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.eq-paperdoll .eq-avatar-stack {
+    width: 130px;
+    height: 130px;
+}
+
+/* Small avatar for the bot list rows. */
+.bot-list li .eq-avatar-stack {
+    width: 38px;
+    height: 38px;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+.bot-list li {
+    display: flex;
+    align-items: center;
+}
+.bot-list li > .bot-info { flex: 1; }
+
+/* Medium avatar in the bot detail header + character-select cards. */
+.bot-header .eq-avatar-stack {
+    width: 56px;
+    height: 56px;
+    margin-right: 14px;
+    flex-shrink: 0;
+}
+.bot-header > div:first-child { display: flex; align-items: center; }
+.character-list li .eq-avatar-stack {
+    width: 44px;
+    height: 44px;
+    margin-right: 14px;
+    flex-shrink: 0;
+}
+.character-list li .char-info { flex: 1; }
+
+/* Topbar character badge avatar. */
+.character-badge .eq-avatar-stack {
+    width: 32px;
+    height: 32px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+.character-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+.character-badge .badge-text { display: flex; flex-direction: column; }
+
+/* ---- Player inventory item icons ------------------------------------ */
+/* Wider rows now that each item has an icon column. */
+.inventory-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+.inv-item {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px;
+    min-height: 52px;
+}
+.inv-item .eq-icon-wrap {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 12, 8, 0.35);
+    border-radius: 3px;
+}
+.inv-item .item-info { min-width: 0; }
+.inv-item .item-name {
+    font-size: 0.78rem;
+    line-height: 1.15;
+}
+.inv-item .item-meta {
+    font-size: 0.65rem;
+    margin-top: 2px;
+}
+
+/* Slightly tighter tooltip when an icon is inside it. */
+.tooltip .t-icon-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
