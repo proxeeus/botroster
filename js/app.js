@@ -442,8 +442,7 @@ function renderSpells() {
                     <span>mana ${s.manacost}</span>
                     <span>recast ${(s.recast_delay/1000).toFixed(1)}s</span>
                 </div>
-            </div>`;
-
+            </div>
             <label class="toggle" title="Enable / disable">
                 <input type="checkbox" ${s.is_enabled ? 'checked' : ''} data-field="is_enabled">
                 on
