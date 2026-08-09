@@ -109,6 +109,14 @@
                             <h3>Spellbook</h3>
                             <div class="spell-filters">
                                 <input type="search" id="spell-filter" placeholder="Filter by spell name…">
+                                <label>Sort
+                                    <select id="spell-sort">
+                                        <option value="level_asc">by level ↑</option>
+                                        <option value="level_desc">by level ↓</option>
+                                        <option value="name_asc">by name (A-Z)</option>
+                                        <option value="type_priority">by type &amp; priority</option>
+                                    </select>
+                                </label>
                                 <label><input type="checkbox" id="spell-only-overrides"> Only show custom settings</label>
                             </div>
                             <div id="spell-list" class="spell-list"></div>

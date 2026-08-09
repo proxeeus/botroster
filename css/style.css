@@ -473,6 +473,20 @@ h3 {
     gap: 6px;
     cursor: pointer;
 }
+.spell-filters select {
+    padding: 4px 6px;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid var(--gold-dk);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--ink);
+    cursor: pointer;
+}
+.spell-filters select:focus {
+    outline: none;
+    border-color: var(--seal-red);
+}
 
 .spell-list {
     display: flex;

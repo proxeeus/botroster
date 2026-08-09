@@ -20,6 +20,7 @@ const state = {
     active_inv_tab: 'worn',
     spells: [],
     spell_filter: '',
+    spell_sort: 'level_asc',
     only_overrides: false,
 };
 
@@ -419,6 +420,7 @@ function renderSpells() {
         if (q && !s.spell_name.toLowerCase().includes(q)) return false;
         return true;
     });
+    shown.sort(spellComparator(state.spell_sort));
 
     if (!shown.length) {
         list.innerHTML = '<div class="dim" style="text-align:center; padding:20px;">No spells match.</div>';
@@ -496,6 +498,21 @@ function renderSpells() {
         });
 
         list.appendChild(row);
+    }
+}
+
+function spellComparator(mode) {
+    const byName = (a, b) => a.spell_name.localeCompare(b.spell_name);
+    switch (mode) {
+        case 'level_desc':
+            return (a, b) => (b.min_level - a.min_level) || byName(a, b);
+        case 'name_asc':
+            return byName;
+        case 'type_priority':
+            return (a, b) => (a.type - b.type) || (a.priority - b.priority) || byName(a, b);
+        case 'level_asc':
+        default:
+            return (a, b) => (a.min_level - b.min_level) || byName(a, b);
     }
 }
 
@@ -616,6 +633,7 @@ function resetSessionUi({ keepAccount = false } = {}) {
     state.equipment_selected_source = null;
     state.spells = [];
     state.spell_filter = '';
+    state.spell_sort = 'level_asc';
     state.only_overrides = false;
     // Force the detail panel back to its "pick a bot" state.
     document.getElementById('detail-content').classList.add('hidden');
@@ -634,6 +652,8 @@ function resetSessionUi({ keepAccount = false } = {}) {
     if (filterInput) filterInput.value = '';
     const onlyOverridesInput = document.getElementById('spell-only-overrides');
     if (onlyOverridesInput) onlyOverridesInput.checked = false;
+    const sortInput = document.getElementById('spell-sort');
+    if (sortInput) sortInput.value = 'level_asc';
     hideTooltip();
 }
 
@@ -666,6 +686,10 @@ document.addEventListener('input', (ev) => {
 document.addEventListener('change', (ev) => {
     if (ev.target.id === 'spell-only-overrides') {
         state.only_overrides = ev.target.checked;
+        renderSpells();
+    }
+    if (ev.target.id === 'spell-sort') {
+        state.spell_sort = ev.target.value;
         renderSpells();
     }
 });
