@@ -314,19 +314,30 @@ function renderPaperdoll() {
 }
 
 function renderPlayerInventory() {
-    const grid = document.getElementById('player-inventory');
+    const host = document.getElementById('player-inventory');
     const filter = state.active_inv_tab;
+
+    // "Worn" gets the paperdoll treatment so it mirrors the bot column and
+    // reads as a character-sheet rather than a pile of bag rows.
+    if (filter === 'worn') {
+        const worn = state.player_items.filter(i => i.location === 'worn');
+        document.getElementById('inv-count').textContent = `(${worn.length})`;
+        renderPlayerPaperdoll(host, worn);
+        return;
+    }
+
+    // Bags / bank keep the icon-grid.
+    host.className = 'inventory-grid';
     let filtered;
-    if (filter === 'worn') filtered = state.player_items.filter(i => i.location === 'worn');
-    else if (filter === 'general') filtered = state.player_items.filter(i => i.location === 'general' || i.location === 'bag' || i.location === 'cursor');
+    if (filter === 'general') filtered = state.player_items.filter(i => i.location === 'general' || i.location === 'bag' || i.location === 'cursor');
     else if (filter === 'bank') filtered = state.player_items.filter(i => i.location === 'bank' || i.location === 'bank_bag' || i.location === 'shared_bank');
     else filtered = state.player_items;
 
     document.getElementById('inv-count').textContent = `(${filtered.length})`;
 
-    grid.innerHTML = '';
+    host.innerHTML = '';
     if (!filtered.length) {
-        grid.innerHTML = '<div class="dim" style="grid-column: 1/-1; text-align:center; padding:20px;">Nothing here.</div>';
+        host.innerHTML = '<div class="dim" style="grid-column: 1/-1; text-align:center; padding:20px;">Nothing here.</div>';
         return;
     }
     for (const inv of filtered) {
@@ -350,8 +361,47 @@ function renderPlayerInventory() {
         div.addEventListener('mouseenter', (ev) => showTooltip(ev, item, state.selected_bot));
         div.addEventListener('mouseleave', hideTooltip);
         div.addEventListener('click', () => onInventoryClick(inv, item));
-        grid.appendChild(div);
+        host.appendChild(div);
     }
+}
+
+// Renders the player's worn equipment as a paperdoll matching the bot side.
+// Click on an occupied slot = same as clicking that inv-item row (source
+// select for equip). Click on an empty slot is a no-op.
+function renderPlayerPaperdoll(host, wornItems) {
+    host.className = 'eq-paperdoll player-paperdoll';
+    host.innerHTML = '';
+    const bySlot = {};
+    for (const w of wornItems) bySlot[w.slot] = w;
+
+    for (let slotId = 0; slotId <= 22; slotId++) {
+        const inv = bySlot[slotId];
+        const item = inv ? state.player_items_by_id[inv.item_id] : null;
+        const div = document.createElement('div');
+        div.className = `slot eq-slot-${slotId}` + (inv ? '' : ' empty');
+        if (inv && state.equipment_selected_source === inv.slot) div.classList.add('selected');
+        const label = EQUIP_LABEL[slotId] || '';
+        const innerCls = 'slot-inner' + (item ? '' : ` slot-silhouette slot-silhouette-${slotId}`);
+        const iconStyle = item ? itemIconStyle(item.icon) : '';
+        div.innerHTML = `
+            <div class="${innerCls}"
+                 title="${item ? escapeHtml(item.Name) : label}"
+                 ${iconStyle ? `style="${iconStyle}"` : ''}>
+            </div>
+            <span class="slot-label">${label}</span>
+            ${inv && inv.no_drop ? '<span class="nodrop-badge">nd</span>' : ''}`;
+        if (item) {
+            div.addEventListener('mouseenter', (ev) => showTooltip(ev, item, state.selected_bot));
+            div.addEventListener('mouseleave', hideTooltip);
+            div.addEventListener('click', () => onInventoryClick(inv, item));
+        }
+        host.appendChild(div);
+    }
+    // Character avatar in the middle -- mirrors the bot paperdoll layout.
+    const av = document.createElement('div');
+    av.className = 'eq-avatar';
+    av.innerHTML = state.character ? avatarHtml(state.character, { self: true }) : '';
+    host.appendChild(av);
 }
 
 function onInventoryClick(inv, item) {
