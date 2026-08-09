@@ -1,0 +1,5 @@
+/api/config.php
+*.log
+.vscode/
+.idea/
+Thumbs.db

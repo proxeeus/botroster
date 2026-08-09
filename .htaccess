@@ -1,0 +1,9 @@
+<Files "config.php">
+    Require all denied
+</Files>
+<Files "*.md">
+    Require all denied
+</Files>
+<Files ".gitignore">
+    Require all denied
+</Files>

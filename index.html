@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bot Roster</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Login view ------------------------------------------------------- -->
+    <div id="view-login" class="view hidden">
+        <div class="parchment login-card">
+            <h1 class="crest">Bot Roster</h1>
+            <p class="subtle">A companion journal for the loyal companions who serve you.</p>
+            <form id="login-form" autocomplete="on">
+                <label>Account
+                    <input type="text" name="account" required autocomplete="username">
+                </label>
+                <label>Password
+                    <input type="password" name="password" required autocomplete="current-password">
+                </label>
+                <button type="submit" class="seal-btn">Enter the Hall</button>
+                <div id="login-error" class="error"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Character select view ------------------------------------------- -->
+    <div id="view-characters" class="view hidden">
+        <div class="parchment character-card">
+            <h1 class="crest">Choose Your Adventurer</h1>
+            <p class="subtle">Select which of your souls shall command their retinue tonight.</p>
+            <ul id="character-list" class="character-list"></ul>
+            <div class="footer-actions">
+                <button class="link-btn" data-action="logout">Sign out</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main app view --------------------------------------------------- -->
+    <div id="view-main" class="view hidden">
+        <header class="topbar">
+            <h1 class="crest small">Bot Roster</h1>
+            <div class="character-badge">
+                <span id="char-name">--</span>
+                <span class="dim" id="char-title">--</span>
+            </div>
+            <nav class="topbar-actions">
+                <button class="link-btn" data-action="change-character">Switch adventurer</button>
+                <button class="link-btn" data-action="logout">Sign out</button>
+            </nav>
+        </header>
+
+        <main class="main-grid">
+            <!-- Bot list ------------------------------------------------- -->
+            <aside class="bot-panel parchment">
+                <h2>Retinue</h2>
+                <ul id="bot-list" class="bot-list"></ul>
+                <p id="bot-empty" class="dim hidden">
+                    You have not enlisted any companions yet.<br>
+                    Speak to a Bot Master in the city to begin.
+                </p>
+            </aside>
+
+            <!-- Detail panel --------------------------------------------- -->
+            <section class="detail-panel">
+                <div id="detail-placeholder" class="parchment placeholder">
+                    <p>Select a companion from the roster to review their gear or spellbook.</p>
+                </div>
+
+                <div id="detail-content" class="hidden">
+                    <div class="parchment bot-header">
+                        <div>
+                            <h2 id="bot-name">--</h2>
+                            <p class="dim" id="bot-subtitle">--</p>
+                        </div>
+                        <div class="tabs">
+                            <button class="tab" data-tab="equipment">Equipment</button>
+                            <button class="tab" data-tab="spells">Spellbook</button>
+                        </div>
+                    </div>
+
+                    <!-- Equipment tab ---------------------------------- -->
+                    <div id="tab-equipment" class="tab-panel hidden">
+                        <div class="equipment-grid">
+                            <div class="parchment column">
+                                <h3>Bot Equipment</h3>
+                                <div id="bot-paperdoll" class="paperdoll"></div>
+                                <p class="hint dim">
+                                    Click a piece of your inventory to equip it,
+                                    or click a worn item to return it to your bags.
+                                </p>
+                            </div>
+                            <div class="parchment column">
+                                <h3>Your Inventory <span class="dim" id="inv-count"></span></h3>
+                                <div class="inv-tabs">
+                                    <button class="inv-tab active" data-inv="worn">Worn</button>
+                                    <button class="inv-tab" data-inv="general">Bags</button>
+                                    <button class="inv-tab" data-inv="bank">Bank</button>
+                                </div>
+                                <div id="player-inventory" class="inventory-grid"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spells tab ------------------------------------- -->
+                    <div id="tab-spells" class="tab-panel hidden">
+                        <div class="parchment column">
+                            <h3>Spellbook</h3>
+                            <div class="spell-filters">
+                                <input type="search" id="spell-filter" placeholder="Filter by spell name…">
+                                <label><input type="checkbox" id="spell-only-overrides"> Only show custom settings</label>
+                            </div>
+                            <div id="spell-list" class="spell-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast host --------------------------------------------------- -->
+    <div id="toasts" class="toasts"></div>
+
+    <!-- Item tooltip host ------------------------------------------- -->
+    <div id="tooltip" class="tooltip hidden"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
