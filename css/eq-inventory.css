@@ -228,8 +228,123 @@
 .bot-list li {
     display: flex;
     align-items: center;
+    gap: 4px;
+    position: relative;
 }
-.bot-list li > .bot-info { flex: 1; }
+.bot-list li > .bot-info { flex: 1; min-width: 0; }
+.bot-list li .bot-info .bot-name {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bot-list li .class-monogram {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+}
+
+/* --- Roster controls (search + sort) --------------------------------- */
+.roster-controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.roster-controls input[type="search"] {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: rgba(255,255,255,0.35);
+    border: 1px solid var(--gold-dk);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--ink);
+}
+.roster-controls input[type="search"]:focus {
+    outline: none;
+    border-color: var(--seal-red);
+    background: rgba(255,255,255,0.55);
+}
+.roster-controls select {
+    padding: 4px 6px;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid var(--gold-dk);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--ink);
+    cursor: pointer;
+    max-width: 90px;
+}
+
+/* --- Bot groups (Tanks / Healers / ...) ------------------------------ */
+.bot-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.bot-group.empty { display: none; }
+.bot-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--gold-dk);
+    font-variant: small-caps;
+    letter-spacing: 1.5px;
+    font-size: 0.85rem;
+    color: var(--ink);
+    user-select: none;
+}
+.bot-group-header:hover { background: rgba(184,147,90,0.15); }
+.bot-group-header .chevron {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    transition: transform 0.15s ease;
+    display: inline-block;
+    width: 12px;
+    text-align: center;
+}
+.bot-group.collapsed .chevron { transform: rotate(-90deg); }
+.bot-group.collapsed .bot-list { display: none; }
+.bot-group-header .role-count {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.5px;
+}
+.bot-group.favorites .bot-group-header {
+    color: var(--seal-red);
+    border-bottom-color: var(--seal-red);
+}
+.bot-group.favorites .bot-group-header .role-star {
+    color: var(--seal-red);
+}
+
+/* --- Pin button on each row ------------------------------------------ */
+.bot-list li .pin-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: transparent;
+    border: none;
+    color: rgba(60, 40, 20, 0.25);
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    font-family: inherit;
+    transition: color 0.1s ease, transform 0.1s ease;
+}
+.bot-list li .pin-btn:hover { color: var(--seal-red); transform: scale(1.15); }
+.bot-list li.pinned .pin-btn { color: var(--seal-red); }
+
+.roster-count { font-size: 0.75rem; font-style: normal; letter-spacing: 0.5px; }
 
 /* Medium avatar in the bot detail header + character-select cards. */
 .bot-header .eq-avatar-stack {

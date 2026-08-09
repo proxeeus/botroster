@@ -58,8 +58,16 @@
         <main class="main-grid">
             <!-- Bot list ------------------------------------------------- -->
             <aside class="bot-panel parchment">
-                <h2>Retinue</h2>
-                <ul id="bot-list" class="bot-list"></ul>
+                <h2>Retinue <span class="dim roster-count" id="roster-count"></span></h2>
+                <div class="roster-controls">
+                    <input type="search" id="roster-search" placeholder="Filter by name…" autocomplete="off">
+                    <select id="roster-sort" title="Sort within each group">
+                        <option value="level_desc">Level ↓</option>
+                        <option value="level_asc">Level ↑</option>
+                        <option value="name_asc">Name A-Z</option>
+                    </select>
+                </div>
+                <div id="bot-groups" class="bot-groups"></div>
                 <p id="bot-empty" class="dim hidden">
                     You have not enlisted any companions yet.<br>
                     Speak to a Bot Master in the city to begin.
