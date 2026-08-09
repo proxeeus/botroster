@@ -431,12 +431,19 @@ function renderSpells() {
     for (const s of shown) {
         const row = document.createElement('div');
         row.className = 'spell-row' + (s.is_enabled ? '' : ' disabled') + (s.override ? ' override' : '');
+        const levelLabel = levelRangeLabel(s.min_level, s.max_level);
+        const typeLabel = spellTypeLabel(s.type);
         row.innerHTML = `
-            <div class="dim" title="Lv ${s.min_level}">L${s.min_level}</div>
+            <div class="spell-level" title="Levels ${s.min_level}–${s.max_level || '?'}">${levelLabel}</div>
             <div>
                 <div class="spell-name">${escapeHtml(s.spell_name)}</div>
-                <div class="spell-meta">type ${s.type} · mana ${s.manacost} · recast ${s.recast_delay}ms</div>
-            </div>
+                <div class="spell-meta">
+                    <span class="spell-type-tag">${escapeHtml(typeLabel)}</span>
+                    <span>mana ${s.manacost}</span>
+                    <span>recast ${(s.recast_delay/1000).toFixed(1)}s</span>
+                </div>
+            </div>`;
+
             <label class="toggle" title="Enable / disable">
                 <input type="checkbox" ${s.is_enabled ? 'checked' : ''} data-field="is_enabled">
                 on
@@ -499,6 +506,33 @@ function renderSpells() {
 
         list.appendChild(row);
     }
+}
+
+// Bit-position -> label. Mirrors SpellType_* in Server/common/spdat.h.
+// bot_spells_entries.type is stored as a bitmask; usually one bit is set,
+// but decoder handles combinations too.
+const SPELL_TYPE_LABELS = [
+    'Nuke','Heal','Root','Buff','Escape','Pet','Lifetap','Snare','DOT',
+    'Dispel','InCombat Buff','Mez','Charm','Slow','Debuff','Cure',
+    'Resurrect','Hate Redux','InCombat Song','OOC Song','PreCombat Buff',
+    'PreCombat Song','Twitch',
+];
+function spellTypeLabel(mask) {
+    const m = +mask;
+    if (!m) return 'Untyped';
+    const parts = [];
+    for (let i = 0; i < SPELL_TYPE_LABELS.length; i++) {
+        if (m & (1 << i)) parts.push(SPELL_TYPE_LABELS[i]);
+    }
+    // Unknown bits (future engine additions): show as trailing hex flag.
+    const knownMask = (1 << SPELL_TYPE_LABELS.length) - 1;
+    const extra = m & ~knownMask;
+    if (extra) parts.push('0x' + extra.toString(16));
+    return parts.join(' / ') || 'Untyped';
+}
+function levelRangeLabel(min, max) {
+    if (!max || max >= 255 || max === min) return `L${min}`;
+    return `L${min}–${max}`; // en-dash
 }
 
 function spellComparator(mode) {

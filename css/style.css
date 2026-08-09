@@ -498,7 +498,7 @@ h3 {
 }
 .spell-row {
     display: grid;
-    grid-template-columns: 32px 1fr auto auto auto auto;
+    grid-template-columns: 56px 1fr auto auto auto auto;
     gap: 10px;
     align-items: center;
     padding: 8px 12px;
@@ -506,6 +506,32 @@ h3 {
     border: 1px solid var(--gold-dk);
     border-radius: 3px;
     font-size: 0.9rem;
+}
+.spell-row .spell-level {
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    background: rgba(184, 147, 90, 0.2);
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+.spell-row .spell-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+}
+.spell-row .spell-type-tag {
+    background: rgba(122, 32, 32, 0.15);
+    color: var(--seal-red);
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+    font-weight: bold;
 }
 .spell-row.disabled { opacity: 0.5; }
 .spell-row.override {
