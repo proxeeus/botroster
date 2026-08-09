@@ -230,6 +230,7 @@
     align-items: center;
     gap: 4px;
     position: relative;
+    padding-right: 50px; /* room for the pin+R badges pinned top-right */
 }
 .bot-list li > .bot-info { flex: 1; min-width: 0; }
 .bot-list li .bot-info .bot-name {
@@ -326,23 +327,65 @@
     color: var(--seal-red);
 }
 
-/* --- Pin button on each row ------------------------------------------ */
-.bot-list li .pin-btn {
+/* --- Row badges (pin star + raid-roster R) --------------------------- */
+.bot-list li .row-badges {
     position: absolute;
     top: 4px;
     right: 4px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 1;
+}
+.bot-list li .pin-btn,
+.bot-list li .roster-btn {
     background: transparent;
     border: none;
-    color: rgba(60, 40, 20, 0.25);
-    font-size: 0.85rem;
     cursor: pointer;
     padding: 2px 4px;
     line-height: 1;
     font-family: inherit;
-    transition: color 0.1s ease, transform 0.1s ease;
+    transition: color 0.1s ease, transform 0.1s ease, background 0.1s ease;
+}
+.bot-list li .pin-btn {
+    color: rgba(60, 40, 20, 0.25);
+    font-size: 0.85rem;
 }
 .bot-list li .pin-btn:hover { color: var(--seal-red); transform: scale(1.15); }
 .bot-list li.pinned .pin-btn { color: var(--seal-red); }
+
+/* "R" badge -- persistent server-side raid roster (^raidcreate). */
+.bot-list li .roster-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(60, 40, 20, 0.35);
+    color: rgba(60, 40, 20, 0.35);
+    font-size: 0.65rem;
+    font-weight: bold;
+    font-variant: small-caps;
+    letter-spacing: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: rgba(255,255,255,0.15);
+}
+.bot-list li .roster-btn:hover {
+    color: var(--seal-red);
+    border-color: var(--seal-red);
+    transform: scale(1.15);
+}
+.bot-list li.in-roster .roster-btn {
+    color: #fff8e0;
+    background: linear-gradient(180deg, #a63030 0%, var(--seal-red) 100%);
+    border-color: var(--seal-red-dk);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+.bot-list li.in-roster {
+    border-left: 3px solid var(--seal-red);
+}
 
 .roster-count { font-size: 0.75rem; font-style: normal; letter-spacing: 0.5px; }
 

@@ -28,6 +28,7 @@ const state = {
     roster_sort: 'level_desc',
     favorites: new Set(),        // Set<bot_id> pinned for the current character
     collapsed_groups: new Set(), // Set<role_key> for user-collapsed sections
+    raid_roster: new Set(),      // Set<bot_id> currently in the ^raidcreate roster
 };
 
 // --- EQ visual helpers ------------------------------------------------
@@ -112,6 +113,30 @@ function togglePin(botId) {
     else state.favorites.add(botId);
     saveFavorites();
     renderBotGroups();
+}
+
+// Server-side roster toggle (writes to bot_raid_roster). Persists across
+// devices and shows up in the game's ^raidcreate command.
+async function toggleRaidRoster(botId) {
+    const inRoster = state.raid_roster.has(botId);
+    const action = inRoster ? 'remove' : 'add';
+    // Optimistic update so the badge flips immediately.
+    if (inRoster) state.raid_roster.delete(botId);
+    else state.raid_roster.add(botId);
+    // Also mirror into the cached bot row so any re-render sees the new state.
+    const bot = state.bots.find(b => b.id === botId);
+    if (bot) bot.in_raid_roster = !inRoster;
+    renderBotGroups();
+    try {
+        await api('roster.php', { method: 'POST', body: { bot_id: botId, action } });
+    } catch (e) {
+        // Roll back and warn.
+        if (inRoster) state.raid_roster.add(botId);
+        else state.raid_roster.delete(botId);
+        if (bot) bot.in_raid_roster = inRoster;
+        renderBotGroups();
+        toast(e.message, 'error');
+    }
 }
 function toggleGroupCollapse(role) {
     if (state.collapsed_groups.has(role)) state.collapsed_groups.delete(role);
@@ -278,6 +303,8 @@ async function loadBots() {
         empty.classList.add('hidden');
         loadFavorites();
         loadCollapsedGroups();
+        // Seed the raid_roster set from the flag on each bot row.
+        state.raid_roster = new Set(bots.filter(b => b.in_raid_roster).map(b => b.id));
         renderBotGroups();
     } catch (e) {
         groups.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
@@ -285,11 +312,19 @@ async function loadBots() {
 }
 
 function botRowHtml(b) {
-    const pinned = state.favorites.has(b.id);
+    const pinned   = state.favorites.has(b.id);
+    const inRoster = state.raid_roster.has(b.id);
+    const classes = [];
+    if (pinned)   classes.push('pinned');
+    if (inRoster) classes.push('in-roster');
     return `
-        <li data-bot-id="${b.id}" class="${pinned ? 'pinned' : ''}">
-            <button class="pin-btn" data-action="pin" data-bot-id="${b.id}"
-                    title="${pinned ? 'Unpin' : 'Pin to favorites'}">${pinned ? '★' : '☆'}</button>
+        <li data-bot-id="${b.id}" class="${classes.join(' ')}">
+            <div class="row-badges">
+                <button class="pin-btn" data-action="pin" data-bot-id="${b.id}"
+                        title="${pinned ? 'Unpin from favorites' : 'Pin to favorites'}">${pinned ? '★' : '☆'}</button>
+                <button class="roster-btn" data-action="roster" data-bot-id="${b.id}"
+                        title="${inRoster ? 'Remove from raid roster (^raidcreate)' : 'Add to raid roster (^raidcreate)'}">R</button>
+            </div>
             ${avatarHtml(b)}
             <div class="bot-info">
                 <div class="bot-name">${classMonogramHtml(b.class)}<span>${escapeHtml(b.name)}</span></div>
@@ -316,8 +351,10 @@ function renderBotGroups() {
     const cmp = botComparator(state.roster_sort);
     // Apply search first, then bucket.
     const matching = q ? state.bots.filter(b => b.name.toLowerCase().includes(q)) : state.bots;
+    const raidCount = state.raid_roster.size;
+    const raidBadge = raidCount ? ` · in raid ${raidCount}` : '';
     document.getElementById('roster-count').textContent =
-        q ? `(${matching.length} / ${state.bots.length})` : `(${state.bots.length})`;
+        (q ? `(${matching.length} / ${state.bots.length})` : `(${state.bots.length})`) + raidBadge;
 
     // Favorites section -- only bots that (a) are pinned and (b) pass the search.
     const favBots = matching.filter(b => state.favorites.has(b.id)).sort(cmp);
@@ -363,6 +400,12 @@ function buildGroupSection(role, label, bots, isFavorites) {
         if (pinBtn) {
             ev.stopPropagation();
             togglePin(+pinBtn.dataset.botId);
+            return;
+        }
+        const rosterBtn = ev.target.closest('[data-action="roster"]');
+        if (rosterBtn) {
+            ev.stopPropagation();
+            toggleRaidRoster(+rosterBtn.dataset.botId);
             return;
         }
         const li = ev.target.closest('li[data-bot-id]');
@@ -935,6 +978,7 @@ function resetSessionUi({ keepAccount = false } = {}) {
     state.roster_sort = 'level_desc';
     state.favorites = new Set();
     state.collapsed_groups = new Set();
+    state.raid_roster = new Set();
     document.getElementById('bot-paperdoll').innerHTML = '';
     document.getElementById('player-inventory').innerHTML = '';
     document.getElementById('spell-list').innerHTML = '';
