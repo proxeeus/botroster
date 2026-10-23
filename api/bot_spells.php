@@ -3,6 +3,10 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/slots.php';
 
+// The v29c client's spell file stops at 2010; the server skips every bot
+// spell entry past it (Server zone/botspellsai.cpp kBotEraMaxSpellId).
+const ERA_MAX_SPELL_ID = 2010;
+
 $s = require_auth();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -55,6 +59,15 @@ if ($method === 'GET') {
     foreach ($entries as $e) {
         $sid = (int) $e['spell_id'];
         $o   = $overrides[$sid] ?? null;
+
+        // Bot::AI_AddBotSpells loads an entry only when the bot's level is
+        // within minlevel..maxlevel and the id is one the v29c client knows.
+        $inactive = null;
+        if ($sid > ERA_MAX_SPELL_ID) {
+            $inactive = 'out_of_era';
+        } elseif ((int) $bot['level'] > (int) $e['maxlevel']) { // maxlevel 0 = never
+            $inactive = 'outgrown';
+        }
         $out[] = [
             'spell_id'         => $sid,
             'spell_name'       => $e['spell_name'] ?: "Spell #$sid",
@@ -72,6 +85,7 @@ if ($method === 'GET') {
             'min_hp'           => $o ? $o['min_hp']     : (int) $e['min_hp'],
             'max_hp'           => $o ? $o['max_hp']     : (int) $e['max_hp'],
             'is_enabled'       => $o ? $o['is_enabled'] : 1,
+            'inactive'         => $inactive,
         ];
     }
 

@@ -534,6 +534,16 @@ h3 {
     font-weight: bold;
 }
 .spell-row.disabled { opacity: 0.5; }
+.spell-row.inactive { opacity: 0.55; background: rgba(90, 66, 50, 0.08); }
+.spell-row .spell-inactive-tag {
+    background: rgba(90, 66, 50, 0.18);
+    color: var(--ink-soft);
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+}
+.tactics-line { font-size: 0.75rem; margin: -6px 0 8px; }
 .spell-row.override {
     background: rgba(184,147,90,0.25);
     border-left: 3px solid var(--seal-red);

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/slots.php';
+require_once __DIR__ . '/bot_vault.php';
 
 $s = require_auth();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -10,18 +11,32 @@ if ($method === 'GET') {
     $bot_id = (int) ($_GET['bot_id'] ?? 0);
     if ($bot_id <= 0) fail(400, 'missing_fields', 'bot_id is required.');
     $bot = assert_bot_owned($s['account_id'], $bot_id);
+    $owner_cid = (int) $bot['owner_id'];
 
     $stmt = db()->prepare(
-        'SELECT slot_id, item_id, inst_charges, inst_color, inst_no_drop,
+        'SELECT slot_id, item_id, inst_charges, inst_color, inst_no_drop, inst_custom_data,
                 augment_1, augment_2, augment_3, augment_4, augment_5, augment_6
          FROM bot_inventories WHERE bot_id = :bid ORDER BY slot_id ASC'
     );
     $stmt->execute([':bid' => $bot_id]);
     $rows = $stmt->fetchAll();
 
+    $vault_rows = [];
+    if (vault_available()) {
+        $stmt = db()->prepare(
+            'SELECT vault_id, item_id, charges, color, attuned, vaulted_at
+             FROM bot_vault WHERE bot_id = :bid ORDER BY vault_id ASC'
+        );
+        $stmt->execute([':bid' => $bot_id]);
+        $vault_rows = $stmt->fetchAll();
+    }
+
     // Look up items so the UI can display names/stats without a second call.
     $item_ids = [];
     foreach ($rows as $r) {
+        if ((int) $r['item_id'] > 0) $item_ids[(int) $r['item_id']] = true;
+    }
+    foreach ($vault_rows as $r) {
         if ((int) $r['item_id'] > 0) $item_ids[(int) $r['item_id']] = true;
     }
     $items_by_id = [];
@@ -30,7 +45,7 @@ if ($method === 'GET') {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = db()->prepare(
             "SELECT id, Name, icon, itemtype, classes, races, slots, ac, hp, mana,
-                    damage, delay, nodrop, magic, loregroup
+                    damage, delay, nodrop, magic, loregroup, reqlevel
              FROM items WHERE id IN ($placeholders)"
         );
         $stmt->execute($ids);
@@ -47,6 +62,8 @@ if ($method === 'GET') {
             'charges'   => (int) $r['inst_charges'],
             'color'     => (int) $r['inst_color'],
             'no_drop'   => (int) $r['inst_no_drop'],
+            // true: the owner handed it over and gets it back; false: bot-bound.
+            'gift'      => is_owner_gift($r['inst_custom_data'], $owner_cid),
             'augments'  => array_values(array_filter([
                 (int) $r['augment_1'], (int) $r['augment_2'], (int) $r['augment_3'],
                 (int) $r['augment_4'], (int) $r['augment_5'], (int) $r['augment_6'],
@@ -54,12 +71,25 @@ if ($method === 'GET') {
         ];
     }
 
+    $vault = [];
+    foreach ($vault_rows as $r) {
+        $vault[] = [
+            'vault_id'   => (int) $r['vault_id'],
+            'item_id'    => (int) $r['item_id'],
+            'charges'    => (int) $r['charges'],
+            'no_drop'    => (int) $r['attuned'],
+            'vaulted_at' => $r['vaulted_at'],
+        ];
+    }
+
     json_out([
-        'bot'         => $bot,
-        'bot_class_name' => class_name((int) $bot['class']),
-        'bot_race_name'  => race_name((int) $bot['race']),
-        'equipment'   => $out,
-        'items_by_id' => $items_by_id,
+        'bot'             => $bot,
+        'bot_class_name'  => class_name((int) $bot['class']),
+        'bot_race_name'   => race_name((int) $bot['race']),
+        'equipment'       => $out,
+        'vault'           => $vault,
+        'vault_available' => vault_available(),
+        'items_by_id'     => $items_by_id,
     ]);
 }
 
@@ -79,7 +109,8 @@ if ($cid <= 0 || (int) $bot['owner_id'] !== $cid) {
 $pdo = db();
 
 if ($action === 'equip') {
-    // Move an item from the player's inventory into a bot equipment slot.
+    // Move an item from the player's inventory into a bot equipment slot. It
+    // is tagged as an owner gift, so it comes back to this character later.
     // Body: { source_slot: int, target_slot: 0-22 }
     $src = (int) ($body['source_slot'] ?? -1);
     $tgt = (int) ($body['target_slot'] ?? -1);
@@ -87,9 +118,8 @@ if ($action === 'equip') {
 
     $pdo->beginTransaction();
     try {
-        // Lock rows: player source, bot target.
         $stmt = $pdo->prepare(
-            'SELECT itemid, charges, color, instnodrop,
+            'SELECT itemid, charges, color, instnodrop, custom_data,
                     augslot1,augslot2,augslot3,augslot4,augslot5,augslot6
              FROM inventory WHERE charid = :cid AND slotid = :s FOR UPDATE'
         );
@@ -100,90 +130,35 @@ if ($action === 'equip') {
             fail(400, 'empty_source', 'The source slot is empty.');
         }
 
-        // Item metadata for restriction checks.
-        $stmt = $pdo->prepare(
-            'SELECT id, Name, classes, races, slots, nodrop, itemtype
-             FROM items WHERE id = :id LIMIT 1'
-        );
-        $stmt->execute([':id' => (int) $src_row['itemid']]);
-        $item = $stmt->fetch();
+        $item = load_item((int) $src_row['itemid']);
         if (!$item) { $pdo->rollBack(); fail(400, 'unknown_item', 'Item not found in items table.'); }
 
-        $bot_class = (int) $bot['class'];
-        $bot_race  = (int) $bot['race'];
-        if (!item_fits_slot($item, $tgt)) {
-            $pdo->rollBack();
-            fail(400, 'slot_forbidden', $item['Name'] . " cannot go into " . (EQUIPMENT_SLOT_NAMES[$tgt] ?? "slot $tgt") . ".");
+        assert_bot_can_equip($pdo, $bot, $item, $tgt);
+
+        $worn    = lock_bot_equipment($pdo, $bot_id);
+        $release = slots_released($pdo, $worn, $item, $tgt);
+        assert_no_bot_lore($pdo, $bot, $worn, $release, $item);
+
+        // Returning gifts take the freed source slot first -- unless it is a
+        // worn slot of yours, which the returning item may not fit.
+        $returns = [];
+        if ($src < 0 || $src > 22) $returns[] = [$src, true];
+        foreach (free_general_slots($pdo, $cid) as $free) $returns[] = [$free, false];
+
+        $moves = release_bot_slots($pdo, $bot, $cid, $worn, $release, $returns, $src);
+
+        $src_reused = false;
+        foreach ($moves as $m) {
+            if (($m['player_slot'] ?? null) === $src) $src_reused = true;
         }
-        if (!item_allows_class($item, $bot_class)) {
-            $pdo->rollBack();
-            fail(400, 'class_forbidden', $item['Name'] . " isn't usable by a " . class_name($bot_class) . ".");
-        }
-        if (!item_allows_race($item, $bot_race)) {
-            $pdo->rollBack();
-            fail(400, 'race_forbidden', $item['Name'] . " isn't usable by a " . race_name($bot_race) . ".");
+        if (!$src_reused) {
+            $pdo->prepare('DELETE FROM inventory WHERE charid = :cid AND slotid = :s')
+                ->execute([':cid' => $cid, ':s' => $src]);
         }
 
-        // Currently equipped item in target slot (if any).
-        $stmt = $pdo->prepare(
-            'SELECT item_id, inst_charges, inst_color, inst_no_drop,
-                    augment_1,augment_2,augment_3,augment_4,augment_5,augment_6
-             FROM bot_inventories WHERE bot_id = :bid AND slot_id = :s FOR UPDATE'
-        );
-        $stmt->execute([':bid' => $bot_id, ':s' => $tgt]);
-        $tgt_row = $stmt->fetch();
-
-        // Write bot slot with the source item.
-        if ($tgt_row) {
-            $stmt = $pdo->prepare(
-                'UPDATE bot_inventories
-                 SET item_id = :iid, inst_charges = :ch, inst_color = :co, inst_no_drop = :nd,
-                     augment_1=:a1, augment_2=:a2, augment_3=:a3,
-                     augment_4=:a4, augment_5=:a5, augment_6=:a6
-                 WHERE bot_id = :bid AND slot_id = :s'
-            );
-        } else {
-            $stmt = $pdo->prepare(
-                'INSERT INTO bot_inventories
-                    (bot_id, slot_id, item_id, inst_charges, inst_color, inst_no_drop,
-                     augment_1, augment_2, augment_3, augment_4, augment_5, augment_6)
-                 VALUES
-                    (:bid, :s, :iid, :ch, :co, :nd, :a1, :a2, :a3, :a4, :a5, :a6)'
-            );
-        }
-        $stmt->execute([
-            ':bid' => $bot_id, ':s' => $tgt,
-            ':iid' => (int) $src_row['itemid'],
-            ':ch'  => (int) $src_row['charges'],
-            ':co'  => (int) $src_row['color'],
-            ':nd'  => (int) $src_row['instnodrop'],
-            ':a1'  => (int) $src_row['augslot1'], ':a2' => (int) $src_row['augslot2'],
-            ':a3'  => (int) $src_row['augslot3'], ':a4' => (int) $src_row['augslot4'],
-            ':a5'  => (int) $src_row['augslot5'], ':a6' => (int) $src_row['augslot6'],
-        ]);
-
-        // Player source: if swap, put displaced item there; otherwise delete row.
-        if ($tgt_row && (int) $tgt_row['item_id'] > 0) {
-            $stmt = $pdo->prepare(
-                'UPDATE inventory
-                 SET itemid=:iid, charges=:ch, color=:co, instnodrop=:nd,
-                     augslot1=:a1,augslot2=:a2,augslot3=:a3,augslot4=:a4,augslot5=:a5,augslot6=:a6
-                 WHERE charid=:cid AND slotid=:s'
-            );
-            $stmt->execute([
-                ':iid' => (int) $tgt_row['item_id'],
-                ':ch'  => (int) $tgt_row['inst_charges'],
-                ':co'  => (int) $tgt_row['inst_color'],
-                ':nd'  => (int) $tgt_row['inst_no_drop'],
-                ':a1'  => (int) $tgt_row['augment_1'], ':a2' => (int) $tgt_row['augment_2'],
-                ':a3'  => (int) $tgt_row['augment_3'], ':a4' => (int) $tgt_row['augment_4'],
-                ':a5'  => (int) $tgt_row['augment_5'], ':a6' => (int) $tgt_row['augment_6'],
-                ':cid' => $cid, ':s' => $src,
-            ]);
-        } else {
-            $stmt = $pdo->prepare('DELETE FROM inventory WHERE charid=:cid AND slotid=:s');
-            $stmt->execute([':cid' => $cid, ':s' => $src]);
-        }
+        $inst = inst_from_player_row($src_row);
+        $inst['custom_data'] = mark_owner_gift($inst['custom_data'], $cid);
+        put_bot_item($pdo, $bot_id, $tgt, $inst, false);
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -191,63 +166,25 @@ if ($action === 'equip') {
         throw $e;
     }
 
-    json_out(['ok' => true, 'action' => 'equip', 'source_slot' => $src, 'target_slot' => $tgt]);
+    json_out(['ok' => true, 'action' => 'equip', 'source_slot' => $src, 'target_slot' => $tgt, 'moves' => $moves]);
 }
 
 if ($action === 'unequip') {
-    // Move bot equipment back to the player, into the first free general slot.
+    // Take an item off the bot: an owner gift comes back to your first free
+    // general slot, bot-bound gear goes into the bot's vault.
     $tgt = (int) ($body['bot_slot'] ?? -1);
     if ($tgt < 0 || $tgt > 22) fail(400, 'bad_slot', 'bot_slot must be 0-22.');
 
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare(
-            'SELECT item_id, inst_charges, inst_color, inst_no_drop,
-                    augment_1,augment_2,augment_3,augment_4,augment_5,augment_6
-             FROM bot_inventories WHERE bot_id = :bid AND slot_id = :s FOR UPDATE'
-        );
-        $stmt->execute([':bid' => $bot_id, ':s' => $tgt]);
-        $row = $stmt->fetch();
-        if (!$row || (int) $row['item_id'] <= 0) {
+        $worn = lock_bot_equipment($pdo, $bot_id);
+        if (!isset($worn[$tgt])) {
             $pdo->rollBack();
             fail(400, 'empty_slot', 'That equipment slot is empty.');
         }
 
-        // Find the first free general slot 23-32 for this character.
-        $stmt = $pdo->prepare(
-            'SELECT slotid FROM inventory
-             WHERE charid = :cid AND slotid BETWEEN 23 AND 32 FOR UPDATE'
-        );
-        $stmt->execute([':cid' => $cid]);
-        $taken = [];
-        foreach ($stmt->fetchAll() as $r) $taken[(int) $r['slotid']] = true;
-        $free = null;
-        for ($s2 = 23; $s2 <= 32; $s2++) if (!isset($taken[$s2])) { $free = $s2; break; }
-        if ($free === null) {
-            $pdo->rollBack();
-            fail(400, 'inventory_full', 'Your general inventory (slots 23-32) is full.');
-        }
-
-        // Insert into player inventory, clear bot slot.
-        $stmt = $pdo->prepare(
-            'INSERT INTO inventory
-                (charid, slotid, itemid, charges, color, instnodrop,
-                 augslot1, augslot2, augslot3, augslot4, augslot5, augslot6)
-             VALUES
-                (:cid, :s, :iid, :ch, :co, :nd, :a1, :a2, :a3, :a4, :a5, :a6)'
-        );
-        $stmt->execute([
-            ':cid' => $cid, ':s' => $free,
-            ':iid' => (int) $row['item_id'],
-            ':ch'  => (int) $row['inst_charges'],
-            ':co'  => (int) $row['inst_color'],
-            ':nd'  => (int) $row['inst_no_drop'],
-            ':a1'  => (int) $row['augment_1'], ':a2' => (int) $row['augment_2'],
-            ':a3'  => (int) $row['augment_3'], ':a4' => (int) $row['augment_4'],
-            ':a5'  => (int) $row['augment_5'], ':a6' => (int) $row['augment_6'],
-        ]);
-        $stmt = $pdo->prepare('DELETE FROM bot_inventories WHERE bot_id = :bid AND slot_id = :s');
-        $stmt->execute([':bid' => $bot_id, ':s' => $tgt]);
+        $returns = array_map(fn($free) => [$free, false], free_general_slots($pdo, $cid));
+        $moves = release_bot_slots($pdo, $bot, $cid, $worn, [$tgt], $returns);
 
         $pdo->commit();
     } catch (Throwable $e) {
@@ -255,7 +192,57 @@ if ($action === 'unequip') {
         throw $e;
     }
 
-    json_out(['ok' => true, 'action' => 'unequip', 'bot_slot' => $tgt, 'moved_to_slot' => $free]);
+    $m = $moves[0];
+    json_out([
+        'ok' => true, 'action' => 'unequip', 'bot_slot' => $tgt,
+        'to' => $m['to'], 'moved_to_slot' => $m['player_slot'] ?? null,
+    ]);
 }
 
-fail(400, 'unknown_action', "Unknown action '$action'. Use 'equip' or 'unequip'.");
+if ($action === 'vault_equip') {
+    // ^vaultequip: put a bot-bound item from the bot's vault back on.
+    // Body: { vault_id: int, target_slot: 0-22 }
+    $vid = (int) ($body['vault_id'] ?? 0);
+    $tgt = (int) ($body['target_slot'] ?? -1);
+    if ($vid <= 0) fail(400, 'missing_fields', 'vault_id is required.');
+    if ($tgt < 0 || $tgt > 22) fail(400, 'bad_slot', 'Target slot must be an equipment slot 0-22.');
+    require_vault();
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT * FROM bot_vault WHERE vault_id = :vid AND bot_id = :bid FOR UPDATE'
+        );
+        $stmt->execute([':vid' => $vid, ':bid' => $bot_id]);
+        $vrow = $stmt->fetch();
+        if (!$vrow) {
+            $pdo->rollBack();
+            fail(404, 'not_in_vault', "{$bot['name']} has no item #$vid in the vault.");
+        }
+
+        $item = load_item((int) $vrow['item_id']);
+        if (!$item) { $pdo->rollBack(); fail(400, 'unknown_item', 'Item not found in items table.'); }
+
+        assert_bot_can_equip($pdo, $bot, $item, $tgt);
+
+        $worn    = lock_bot_equipment($pdo, $bot_id);
+        $release = slots_released($pdo, $worn, $item, $tgt);
+        assert_no_bot_lore($pdo, $bot, $worn, $release, $item);
+
+        $returns = array_map(fn($free) => [$free, false], free_general_slots($pdo, $cid));
+        $moves = release_bot_slots($pdo, $bot, $cid, $worn, $release, $returns);
+
+        $pdo->prepare('DELETE FROM bot_vault WHERE vault_id = :vid AND bot_id = :bid')
+            ->execute([':vid' => $vid, ':bid' => $bot_id]);
+        put_bot_item($pdo, $bot_id, $tgt, inst_from_vault_row($vrow), false);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+
+    json_out(['ok' => true, 'action' => 'vault_equip', 'vault_id' => $vid, 'target_slot' => $tgt, 'moves' => $moves]);
+}
+
+fail(400, 'unknown_action', "Unknown action '$action'. Use 'equip', 'unequip' or 'vault_equip'.");

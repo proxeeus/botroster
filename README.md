@@ -51,18 +51,36 @@ is loaded.
 - **Character picker** — every character on that account.
 - **Bot roster** — every bot owned by the selected character.
 - **Equipment** — click an item in your bags to select it, then click a slot
-  on the bot's paperdoll. Slot / class / race restrictions are enforced
-  server-side (mirrors the game's `item.slots & (1 << slot)` bit test).
-  Click a worn item on the bot to send it back to your first free bag slot.
-- **Spellbook** — every spell the bot is entitled to at its level (from
+  on the bot's paperdoll. Slot, class, race, level, secondary-hand (Dual
+  Wield, shield) and lore rules are enforced server-side, the same checks as
+  the game's `^vaultequip`. A two-hander in the primary also takes the
+  secondary off.
+- **Bot vault** — follows the server's anti-exploit rule (`bot_vault`, Server
+  PR#92). An item you hand over is tagged as *your gift*
+  (`bot_gift^<character id>` in its custom data) and comes back to your bags
+  when taken off or replaced. Everything else on a bot (gear a PlayerBot was
+  generated with, quest rewards) is *bot-bound*: it goes into that bot's
+  vault, never to a player. The paperdoll marks each item `yours` or
+  `bound`; the Vault panel lists the vault, and clicking a vault item then
+  a slot puts it back on. Without the `bot_vault` table
+  (`2026_10_20_bots_bot_vault.sql`) every move that would vault an item is
+  refused.
+- **Spellbook** — every spell entry for the bot's class up to its level (from
   `bot_spells_entries`), with per-bot overrides for enabled/priority/HP
   thresholds (upserted into `bot_spell_settings`). `reset` on a row deletes
-  the override so defaults take over again.
+  the override so defaults take over again. Entries the server never loads
+  are hidden unless you tick *Show spells never cast*: ids past 2010 (the
+  v29c client has no such spell) and ranks the bot has outgrown.
+- **Tactics line** — the character's saved `^tactics` overrides (main tank,
+  CH chain, auto-pull), read from the `bot_tactics_<character id>` data
+  bucket. Read-only: zones cache the bucket, so change it in game.
 
 ## What it does NOT do
 
 - Notify a live bot in-game. Changes take effect the next time the bot
-  spawns (log the character out or `^botspawn` again to see them).
+  spawns (log the character out or `^botspawn` again to see them). Move
+  gear while the character is camped: a spawned bot still holds its old
+  gear in memory, and the game would hand a returned gift out a second time.
 - Move items into or out of bags-inside-bags. The equip flow only handles
   worn ↔ top-level bag slots. Move things around in-game first if needed.
 - Touch coin, shared bank, augment sockets, or ornament graphics.
@@ -83,7 +101,8 @@ cookie set by `login.php`.
 | `select_character.php` | POST | `{character_id}` → pin to session |
 | `bots.php` | GET | list bots owned by selected character |
 | `player_inventory.php` | GET | selected character's `inventory` rows |
-| `bot_inventory.php` | GET, POST | GET: bot equipment. POST: `{action: "equip"\|"unequip", ...}` |
+| `bot_inventory.php` | GET, POST | GET: bot equipment + vault. POST: `{action: "equip"\|"unequip"\|"vault_equip", ...}` |
+| `roster.php` | GET, POST | `bot_raid_roster` (the `^raidcreate` list): `{bot_id, action: "add"\|"remove"}` |
 | `bot_spells.php` | GET, POST | GET: spell entries + overrides. POST: `{action: "update"\|"reset", ...}` |
 
 ## Files
@@ -100,6 +119,7 @@ botroster/
 │   ├── auth.php            eqcrypt_verify_hash port (modes 1-14)
 │   ├── slots.php           EQ slot constants + class/race/slot validation
 │   ├── ownership.php       "does this belong to my account?" gate
+│   ├── bot_vault.php       owner gift vs bot-bound gear, equip rules
 │   ├── config.example.php  template
 │   ├── config.php          real config (gitignored)
 │   └── *.php               one file per endpoint
