@@ -1000,7 +1000,9 @@ function showTooltip(ev, item, bot = null) {
     if (+item.hp)     lines.push(`HP ${item.hp}`);
     if (+item.mana)   lines.push(`Mana ${item.mana}`);
     if (+item.damage) lines.push(`Dmg ${item.damage} / Delay ${item.delay || 0}`);
+    if (+item.haste)  lines.push(`Haste +${item.haste}%`);
     if (+item.nodrop === 0) lines.push('NO DROP');
+    const effects = itemEffectLines(item);
 
     // Slot summary from bitmask.
     const slotBits = +item.slots;
@@ -1024,6 +1026,7 @@ function showTooltip(ev, item, bot = null) {
         ${iconHtml ? `<div class="t-icon-row">${iconHtml}<span class="t-name">${escapeHtml(item.Name)}</span></div>`
                    : `<span class="t-name">${escapeHtml(item.Name)}</span>`}
         ${lines.length ? `<div class="t-line">${lines.join(' · ')}</div>` : ''}
+        ${effects.map(e => `<div class="t-effect">${escapeHtml(e)}</div>`).join('')}
         ${slotNames.length ? `<div class="t-line">Slots: ${slotNames.join(', ')}</div>` : ''}
         ${cls.length ? `<div class="t-restrict">Classes: ${cls.join(', ')}</div>` : ''}
         ${races.length ? `<div class="t-restrict">Races: ${races.join(', ')}</div>` : ''}
@@ -1033,6 +1036,34 @@ function showTooltip(ev, item, bot = null) {
     positionTooltip(ev);
     document.addEventListener('mousemove', positionTooltip);
 }
+// "Effect: X (Worn)" etc., as the item window words them. Ids are spell ids;
+// the API resolves the names (worn_name, click_name, ...).
+const CLICK_TYPE_LABEL = { 1: 'Any Slot', 3: 'Expendable', 4: 'Must Equip', 5: 'Any Slot' };
+function itemEffectLines(item) {
+    const out = [];
+    const name = (id, n) => n || `Spell #${id}`;
+    if (+item.worneffect > 0) {
+        out.push(`Effect: ${name(item.worneffect, item.worn_name)} (Worn)`);
+    }
+    if (+item.clickeffect > 0) {
+        const where = CLICK_TYPE_LABEL[+item.clicktype] || 'Click';
+        const extra = [];
+        if (+item.casttime) extra.push(`${(item.casttime / 1000).toFixed(1)}s cast`);
+        if (+item.clicktype === 3 && +item.maxcharges > 0) extra.push(`${item.maxcharges} charges`);
+        if (+item.clicklevel > 1) extra.push(`level ${item.clicklevel}`);
+        out.push(`Effect: ${name(item.clickeffect, item.click_name)} (${where})` +
+                 (extra.length ? ` · ${extra.join(', ')}` : ''));
+    }
+    if (+item.proceffect > 0) {
+        out.push(`Effect: ${name(item.proceffect, item.proc_name)} (Combat)` +
+                 (+item.procrate ? ` · rate ${100 + +item.procrate}%` : ''));
+    }
+    if (+item.focuseffect > 0) {
+        out.push(`Focus: ${name(item.focuseffect, item.focus_name)}`);
+    }
+    return out;
+}
+
 function hideTooltip() {
     tooltipEl.classList.add('hidden');
     document.removeEventListener('mousemove', positionTooltip);

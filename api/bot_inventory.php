@@ -3,6 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/slots.php';
 require_once __DIR__ . '/bot_vault.php';
+require_once __DIR__ . '/items.php';
 
 $s = require_auth();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -39,18 +40,7 @@ if ($method === 'GET') {
     foreach ($vault_rows as $r) {
         if ((int) $r['item_id'] > 0) $item_ids[(int) $r['item_id']] = true;
     }
-    $items_by_id = [];
-    if ($item_ids) {
-        $ids = array_keys($item_ids);
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = db()->prepare(
-            "SELECT id, Name, icon, itemtype, classes, races, slots, ac, hp, mana,
-                    damage, delay, nodrop, magic, loregroup, reqlevel
-             FROM items WHERE id IN ($placeholders)"
-        );
-        $stmt->execute($ids);
-        foreach ($stmt->fetchAll() as $it) $items_by_id[(int) $it['id']] = $it;
-    }
+    $items_by_id = fetch_items_by_id(array_keys($item_ids));
 
     $out = [];
     foreach ($rows as $r) {
