@@ -2,6 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/ownership.php';
 require_once __DIR__ . '/slots.php';
+require_once __DIR__ . '/items.php';
 
 $s = require_auth();
 $cid = (int) ($s['character_id'] ?? 0);
@@ -24,20 +25,7 @@ $item_ids = [];
 foreach ($rows as $r) {
     if ((int) $r['itemid'] > 0) $item_ids[(int) $r['itemid']] = true;
 }
-$items_by_id = [];
-if ($item_ids) {
-    $ids = array_keys($item_ids);
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare(
-        "SELECT id, Name, icon, itemtype, classes, races, slots, ac, hp, mana,
-                damage, delay, nodrop, magic, loregroup
-         FROM items WHERE id IN ($placeholders)"
-    );
-    $stmt->execute($ids);
-    foreach ($stmt->fetchAll() as $it) {
-        $items_by_id[(int) $it['id']] = $it;
-    }
-}
+$items_by_id = fetch_items_by_id(array_keys($item_ids));
 
 // Shape the response: keep raw slotid + computed location + parent_slot; the
 // UI groups by these to render worn / general / bags / bank sections.

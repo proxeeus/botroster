@@ -59,6 +59,7 @@
             <!-- Bot list ------------------------------------------------- -->
             <aside class="bot-panel parchment">
                 <h2>Retinue <span class="dim roster-count" id="roster-count"></span></h2>
+                <p id="tactics-line" class="dim tactics-line" title="Saved by ^tactics in game; change it there"></p>
                 <div class="roster-controls">
                     <input type="search" id="roster-search" placeholder="Filter by name…" autocomplete="off">
                     <select id="roster-sort" title="Sort within each group">
@@ -100,8 +101,12 @@
                                 <div id="bot-paperdoll" class="eq-paperdoll"></div>
                                 <p class="hint dim">
                                     Click a piece of your inventory to equip it,
-                                    or click a worn item to return it to your bags.
+                                    or click a worn item to take it off. Items marked
+                                    <b>yours</b> come back to your bags; <b>bound</b>
+                                    gear never leaves the bot and goes into its vault.
                                 </p>
+                                <h3 class="vault-heading">Vault <span class="dim" id="vault-count"></span></h3>
+                                <div id="bot-vault" class="inventory-grid vault-grid"></div>
                             </div>
                             <div class="parchment column">
                                 <h3>Your Inventory <span class="dim" id="inv-count"></span></h3>
@@ -130,6 +135,10 @@
                                     </select>
                                 </label>
                                 <label><input type="checkbox" id="spell-only-overrides"> Only show custom settings</label>
+                                <label title="Spells past id 2010 or above their max level: the server never loads them for this bot">
+                                    <input type="checkbox" id="spell-show-inactive"> Show spells never cast
+                                    <span class="dim" id="spell-inactive-count"></span>
+                                </label>
                             </div>
                             <div id="spell-list" class="spell-list"></div>
                         </div>

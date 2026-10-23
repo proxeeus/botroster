@@ -16,12 +16,17 @@ const state = {
     player_items: [],     // full inventory rows
     player_items_by_id: {},
     equipment_selected_source: null, // slot in player inventory
+    bot_vault: [],        // bot-bound items the bot is not wearing (bot_vault rows)
+    vault_available: false,
+    vault_selected: null, // vault_id picked for ^vaultequip
     active_tab: 'equipment',
     active_inv_tab: 'worn',
     spells: [],
     spell_filter: '',
     spell_sort: 'level_asc',
     only_overrides: false,
+    show_inactive: false, // spells the server never loads for this bot
+    tactics: null,        // saved ^tactics overrides of the character
 
     // Roster controls
     roster_search: '',
@@ -293,8 +298,10 @@ async function loadBots() {
     const empty = document.getElementById('bot-empty');
     groups.innerHTML = '<div class="dim" style="padding:12px;">Summoning roster…</div>';
     try {
-        const { bots } = await api('bots.php');
+        const { bots, tactics } = await api('bots.php');
         state.bots = bots;
+        state.tactics = tactics;
+        renderTacticsLine();
         if (!bots.length) {
             groups.innerHTML = '';
             empty.classList.remove('hidden');
@@ -309,6 +316,26 @@ async function loadBots() {
     } catch (e) {
         groups.innerHTML = `<div class="error">${escapeHtml(e.message)}</div>`;
     }
+}
+
+// Saved ^tactics overrides, read-only: they are changed in game.
+function renderTacticsLine() {
+    const el = document.getElementById('tactics-line');
+    const t = state.tactics;
+    if (!t) {
+        el.textContent = 'Tactics: automatic (no ^tactics overrides saved).';
+        return;
+    }
+    if (!t.enabled) {
+        el.textContent = 'Tactics: off (^tactics on to restore).';
+        return;
+    }
+    const parts = [
+        `main tank ${t.main_tank || 'auto'}`,
+        `CH chain ${t.chain_ms ? (t.chain_ms / 1000).toFixed(1) + 's' : 'auto'}`,
+        t.auto_pull ? `auto-pull on (${Math.round(t.pull_radius || 250)} around camp)` : 'auto-pull off',
+    ];
+    el.textContent = 'Tactics: ' + parts.join(' · ') + '.';
 }
 
 function botRowHtml(b) {
@@ -446,13 +473,81 @@ async function loadEquipmentTab() {
     if (!state.selected_bot) return;
     await Promise.all([loadBotEquipment(), loadPlayerInventory()]);
     renderPaperdoll();
+    renderVault();
     renderPlayerInventory();
 }
 
 async function loadBotEquipment() {
-    const { equipment, items_by_id } = await api(`bot_inventory.php?bot_id=${state.selected_bot.id}`);
+    const { equipment, vault, vault_available, items_by_id } =
+        await api(`bot_inventory.php?bot_id=${state.selected_bot.id}`);
     state.bot_equipment = equipment;
+    state.bot_vault = vault || [];
+    state.vault_available = !!vault_available;
     state.bot_items = items_by_id;
+    if (!state.bot_vault.some(v => v.vault_id === state.vault_selected)) state.vault_selected = null;
+}
+
+// Bot-bound gear the bot is not wearing. It never goes to a player; pick an
+// item, then a highlighted paperdoll slot, to put it back on (^vaultequip).
+function renderVault() {
+    const host = document.getElementById('bot-vault');
+    const count = document.getElementById('vault-count');
+    host.innerHTML = '';
+    if (!state.vault_available) {
+        count.textContent = '';
+        host.innerHTML = '<div class="dim vault-empty">The bot vault is not set up on this server ' +
+            '(2026_10_20_bots_bot_vault.sql). Bot-bound gear stays on the bot.</div>';
+        return;
+    }
+    count.textContent = `(${state.bot_vault.length})`;
+    if (!state.bot_vault.length) {
+        host.innerHTML = '<div class="dim vault-empty">Empty. Bot-bound gear you take off lands here.</div>';
+        return;
+    }
+    for (const v of state.bot_vault) {
+        const item = state.bot_items[v.item_id];
+        const div = document.createElement('div');
+        div.className = 'inv-item' + (state.vault_selected === v.vault_id ? ' selected' : '');
+        div.innerHTML = `
+            <div class="eq-icon-wrap">${item ? itemIconHtml(item) : ''}</div>
+            <div class="item-info">
+                <div class="item-name">${escapeHtml(item ? item.Name : 'Item #' + v.item_id)}</div>
+                <div class="item-meta">vault #${v.vault_id}</div>
+            </div>`;
+        if (item) {
+            div.addEventListener('mouseenter', (ev) => showTooltip(ev, item, state.selected_bot));
+            div.addEventListener('mouseleave', hideTooltip);
+        }
+        div.addEventListener('click', () => onVaultClick(v, item));
+        host.appendChild(div);
+    }
+}
+
+function onVaultClick(v, item) {
+    if (!item) return;
+    state.equipment_selected_source = null;
+    if (state.vault_selected === v.vault_id) {
+        state.vault_selected = null;
+    } else if (suggestSlot(item) === null) {
+        toast(`${item.Name} cannot be equipped by ${state.selected_bot.name}.`, 'error');
+        state.vault_selected = null;
+    } else {
+        state.vault_selected = v.vault_id;
+        toast(`Selected ${item.Name} from the vault. Click a highlighted slot to put it back on.`, 'success');
+    }
+    renderVault();
+    renderPlayerInventory();
+    highlightPaperdollForItem();
+}
+
+// One line per item an equip pushed off the bot.
+function toastMoves(moves) {
+    for (const m of moves || []) {
+        const item = state.bot_items[m.item_id];
+        const name = item ? item.Name : 'An item';
+        if (m.to === 'vault') toast(`${name} went into ${state.selected_bot.name}'s vault.`, 'success');
+        else toast(`${name} came back to your bags.`, 'success');
+    }
 }
 
 async function loadPlayerInventory() {
@@ -487,7 +582,10 @@ function renderPaperdoll() {
                  ${iconStyle ? `style="${iconStyle}"` : ''}>
             </div>
             <span class="slot-label">${label}</span>
-            ${eq && eq.no_drop ? '<span class="nodrop-badge">nd</span>' : ''}`;
+            ${eq && eq.no_drop ? '<span class="nodrop-badge">nd</span>' : ''}
+            ${eq ? (eq.gift
+                ? '<span class="owner-badge gift" title="Your gift: comes back to you when taken off">yours</span>'
+                : '<span class="owner-badge bound" title="Bot-bound: goes to the bot\'s vault when taken off">bound</span>') : ''}`;
         if (item) {
             div.addEventListener('mouseenter', (ev) => showTooltip(ev, item));
             div.addEventListener('mouseleave', hideTooltip);
@@ -601,6 +699,10 @@ function onInventoryClick(inv, item) {
     }
     // Two-click flow: first click selects the source, second click on a bot
     // slot equips. Second click on the same item cancels.
+    if (state.vault_selected !== null) {
+        state.vault_selected = null;
+        renderVault();
+    }
     if (state.equipment_selected_source === inv.slot) {
         state.equipment_selected_source = null;
     } else {
@@ -644,10 +746,14 @@ function highlightPaperdollForItem() {
     document.querySelectorAll('#bot-paperdoll .slot').forEach(el => {
         el.classList.remove('highlight-target');
     });
-    if (source === null) return;
-    const inv = state.player_items.find(i => i.slot === source);
-    if (!inv) return;
-    const item = state.player_items_by_id[inv.item_id];
+    let item = null;
+    if (state.vault_selected !== null) {
+        const v = state.bot_vault.find(x => x.vault_id === state.vault_selected);
+        item = v ? state.bot_items[v.item_id] : null;
+    } else if (source !== null) {
+        const inv = state.player_items.find(i => i.slot === source);
+        item = inv ? state.player_items_by_id[inv.item_id] : null;
+    }
     if (!item) return;
     for (let i = 0; i <= 22; i++) {
         if (item.slots & (1 << i)) {
@@ -658,25 +764,49 @@ function highlightPaperdollForItem() {
 }
 
 async function onPaperdollClick(slotId) {
+    if (state.vault_selected !== null) {
+        // ^vaultequip flow.
+        try {
+            const r = await api('bot_inventory.php', {
+                method: 'POST',
+                body: {
+                    bot_id: state.selected_bot.id,
+                    action: 'vault_equip',
+                    vault_id: state.vault_selected,
+                    target_slot: slotId,
+                }
+            });
+            toast('Equipped from the vault.', 'success');
+            toastMoves(r.moves);
+            state.vault_selected = null;
+            await loadEquipmentTab();
+        } catch (e) { toast(e.message, 'error'); }
+        return;
+    }
     if (state.equipment_selected_source === null) {
-        // Unequip flow: click occupied slot to send item back to your bags.
+        // Unequip flow: an owner gift goes back to your bags, bot-bound gear
+        // into the bot's vault (it never reaches a player).
         const eq = state.bot_equipment.find(e => e.slot === slotId);
         if (!eq || !eq.item_id) return;
         const item = state.bot_items[eq.item_id];
-        if (!confirm(`Return ${item ? item.Name : 'this item'} to your bags?`)) return;
+        const name = item ? item.Name : 'this item';
+        const question = eq.gift
+            ? `Return ${name} to your bags?`
+            : `${name} is bot-bound: it can't go to a player. Put it in ${state.selected_bot.name}'s vault?`;
+        if (!confirm(question)) return;
         try {
-            await api('bot_inventory.php', {
+            const r = await api('bot_inventory.php', {
                 method: 'POST',
                 body: { bot_id: state.selected_bot.id, action: 'unequip', bot_slot: slotId }
             });
-            toast('Returned to your bags.', 'success');
+            toast(r.to === 'vault' ? `Put in ${state.selected_bot.name}'s vault.` : 'Returned to your bags.', 'success');
             await loadEquipmentTab();
         } catch (e) { toast(e.message, 'error'); }
         return;
     }
     // Equip flow.
     try {
-        await api('bot_inventory.php', {
+        const r = await api('bot_inventory.php', {
             method: 'POST',
             body: {
                 bot_id: state.selected_bot.id,
@@ -686,6 +816,7 @@ async function onPaperdollClick(slotId) {
             }
         });
         toast('Equipped.', 'success');
+        toastMoves(r.moves);
         state.equipment_selected_source = null;
         await loadEquipmentTab();
     } catch (e) {
@@ -710,7 +841,10 @@ async function loadSpellsTab() {
 function renderSpells() {
     const list = document.getElementById('spell-list');
     const q = state.spell_filter.trim().toLowerCase();
+    const hiddenInactive = state.show_inactive ? 0 : state.spells.filter(s => s.inactive).length;
+    document.getElementById('spell-inactive-count').textContent = hiddenInactive ? `(${hiddenInactive} hidden)` : '';
     const shown = state.spells.filter(s => {
+        if (s.inactive && !state.show_inactive) return false;
         if (state.only_overrides && !s.override) return false;
         if (q && !s.spell_name.toLowerCase().includes(q)) return false;
         return true;
@@ -725,15 +859,18 @@ function renderSpells() {
     list.innerHTML = '';
     for (const s of shown) {
         const row = document.createElement('div');
-        row.className = 'spell-row' + (s.is_enabled ? '' : ' disabled') + (s.override ? ' override' : '');
+        row.className = 'spell-row' + (s.is_enabled ? '' : ' disabled') + (s.override ? ' override' : '') +
+                        (s.inactive ? ' inactive' : '');
         const levelLabel = levelRangeLabel(s.min_level, s.max_level);
         const typeLabel = spellTypeLabel(s.type);
+        const inactiveTag = s.inactive ? `<span class="spell-inactive-tag" title="${escapeHtml(SPELL_INACTIVE_TITLE[s.inactive] || '')}">${escapeHtml(SPELL_INACTIVE_LABEL[s.inactive] || 'never cast')}</span>` : '';
         row.innerHTML = `
             <div class="spell-level" title="Levels ${s.min_level}–${s.max_level || '?'}">${levelLabel}</div>
             <div>
                 <div class="spell-name">${escapeHtml(s.spell_name)}</div>
                 <div class="spell-meta">
                     <span class="spell-type-tag">${escapeHtml(typeLabel)}</span>
+                    ${inactiveTag}
                     <span>mana ${s.manacost}</span>
                     <span>recast ${(s.recast_delay/1000).toFixed(1)}s</span>
                 </div>
@@ -824,6 +961,15 @@ function spellTypeLabel(mask) {
     if (extra) parts.push('0x' + extra.toString(16));
     return parts.join(' / ') || 'Untyped';
 }
+// Why the server never loads a bot_spells_entries row (Bot::AI_AddBotSpells).
+const SPELL_INACTIVE_LABEL = {
+    out_of_era: 'never cast: out of era',
+    outgrown:   'never cast: outgrown',
+};
+const SPELL_INACTIVE_TITLE = {
+    out_of_era: 'Spell id past 2010: the v29c client has no such spell, so bots skip it.',
+    outgrown:   'The bot is above this entry\'s max level; a later rank replaces it.',
+};
 function levelRangeLabel(min, max) {
     if (!max || max >= 255 || max === min) return `L${min}`;
     return `L${min}–${max}`; // en-dash
@@ -854,7 +1000,9 @@ function showTooltip(ev, item, bot = null) {
     if (+item.hp)     lines.push(`HP ${item.hp}`);
     if (+item.mana)   lines.push(`Mana ${item.mana}`);
     if (+item.damage) lines.push(`Dmg ${item.damage} / Delay ${item.delay || 0}`);
+    if (+item.haste)  lines.push(`Haste +${item.haste}%`);
     if (+item.nodrop === 0) lines.push('NO DROP');
+    const effects = itemEffectLines(item);
 
     // Slot summary from bitmask.
     const slotBits = +item.slots;
@@ -878,6 +1026,7 @@ function showTooltip(ev, item, bot = null) {
         ${iconHtml ? `<div class="t-icon-row">${iconHtml}<span class="t-name">${escapeHtml(item.Name)}</span></div>`
                    : `<span class="t-name">${escapeHtml(item.Name)}</span>`}
         ${lines.length ? `<div class="t-line">${lines.join(' · ')}</div>` : ''}
+        ${effects.map(e => `<div class="t-effect">${escapeHtml(e)}</div>`).join('')}
         ${slotNames.length ? `<div class="t-line">Slots: ${slotNames.join(', ')}</div>` : ''}
         ${cls.length ? `<div class="t-restrict">Classes: ${cls.join(', ')}</div>` : ''}
         ${races.length ? `<div class="t-restrict">Races: ${races.join(', ')}</div>` : ''}
@@ -887,6 +1036,34 @@ function showTooltip(ev, item, bot = null) {
     positionTooltip(ev);
     document.addEventListener('mousemove', positionTooltip);
 }
+// "Effect: X (Worn)" etc., as the item window words them. Ids are spell ids;
+// the API resolves the names (worn_name, click_name, ...).
+const CLICK_TYPE_LABEL = { 1: 'Any Slot', 3: 'Expendable', 4: 'Must Equip', 5: 'Any Slot' };
+function itemEffectLines(item) {
+    const out = [];
+    const name = (id, n) => n || `Spell #${id}`;
+    if (+item.worneffect > 0) {
+        out.push(`Effect: ${name(item.worneffect, item.worn_name)} (Worn)`);
+    }
+    if (+item.clickeffect > 0) {
+        const where = CLICK_TYPE_LABEL[+item.clicktype] || 'Click';
+        const extra = [];
+        if (+item.casttime) extra.push(`${(item.casttime / 1000).toFixed(1)}s cast`);
+        if (+item.clicktype === 3 && +item.maxcharges > 0) extra.push(`${item.maxcharges} charges`);
+        if (+item.clicklevel > 1) extra.push(`level ${item.clicklevel}`);
+        out.push(`Effect: ${name(item.clickeffect, item.click_name)} (${where})` +
+                 (extra.length ? ` · ${extra.join(', ')}` : ''));
+    }
+    if (+item.proceffect > 0) {
+        out.push(`Effect: ${name(item.proceffect, item.proc_name)} (Combat)` +
+                 (+item.procrate ? ` · rate ${100 + +item.procrate}%` : ''));
+    }
+    if (+item.focuseffect > 0) {
+        out.push(`Focus: ${name(item.focuseffect, item.focus_name)}`);
+    }
+    return out;
+}
+
 function hideTooltip() {
     tooltipEl.classList.add('hidden');
     document.removeEventListener('mousemove', positionTooltip);
@@ -961,10 +1138,15 @@ function resetSessionUi({ keepAccount = false } = {}) {
     state.player_items = [];
     state.player_items_by_id = {};
     state.equipment_selected_source = null;
+    state.bot_vault = [];
+    state.vault_available = false;
+    state.vault_selected = null;
     state.spells = [];
     state.spell_filter = '';
     state.spell_sort = 'level_asc';
     state.only_overrides = false;
+    state.show_inactive = false;
+    state.tactics = null;
     // Force the detail panel back to its "pick a bot" state.
     document.getElementById('detail-content').classList.add('hidden');
     document.getElementById('detail-placeholder').classList.remove('hidden');
@@ -980,6 +1162,9 @@ function resetSessionUi({ keepAccount = false } = {}) {
     state.collapsed_groups = new Set();
     state.raid_roster = new Set();
     document.getElementById('bot-paperdoll').innerHTML = '';
+    document.getElementById('bot-vault').innerHTML = '';
+    document.getElementById('vault-count').textContent = '';
+    document.getElementById('tactics-line').textContent = '';
     document.getElementById('player-inventory').innerHTML = '';
     document.getElementById('spell-list').innerHTML = '';
     document.getElementById('bot-name').textContent = '--';
@@ -993,6 +1178,9 @@ function resetSessionUi({ keepAccount = false } = {}) {
     if (filterInput) filterInput.value = '';
     const onlyOverridesInput = document.getElementById('spell-only-overrides');
     if (onlyOverridesInput) onlyOverridesInput.checked = false;
+    const showInactiveInput = document.getElementById('spell-show-inactive');
+    if (showInactiveInput) showInactiveInput.checked = false;
+    document.getElementById('spell-inactive-count').textContent = '';
     const sortInput = document.getElementById('spell-sort');
     if (sortInput) sortInput.value = 'level_asc';
     hideTooltip();
@@ -1036,6 +1224,10 @@ document.addEventListener('input', (ev) => {
 document.addEventListener('change', (ev) => {
     if (ev.target.id === 'spell-only-overrides') {
         state.only_overrides = ev.target.checked;
+        renderSpells();
+    }
+    if (ev.target.id === 'spell-show-inactive') {
+        state.show_inactive = ev.target.checked;
         renderSpells();
     }
     if (ev.target.id === 'spell-sort') {
